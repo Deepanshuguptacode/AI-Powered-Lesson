@@ -299,6 +299,214 @@ async function hallucinateResponse(messages, opts = {}) {
     });
   }
 
+  // If asking for a lesson (45-minute structure)
+  if (text.includes('45-minute lesson') || text.includes('totalDurationMinutes') || text.includes('SECTION DURATIONS')) {
+    // Extract title and objective from the prompt
+    const titleMatch = text.match(/Title:\s*([^\n]+)/);
+    const objectiveMatch = text.match(/Learning Objective:\s*([^\n]+)/);
+    const title = titleMatch ? titleMatch[1].trim() : 'Lesson Topic';
+    const objective = objectiveMatch ? objectiveMatch[1].trim() : 'Understand the core concepts';
+
+    return JSON.stringify({
+      lessonId: '',
+      researchSessionId: '',
+      title,
+      learningObjective: objective,
+      totalDurationMinutes: 45,
+      sections: {
+        introduction: {
+          durationMinutes: 5,
+          overview: `This lesson introduces ${title} and its foundational concepts.`,
+          whyItMatters: `Understanding ${title} is essential for building practical skills in this domain.`,
+          whatYouWillLearn: [
+            `Define and explain the key concepts of ${title}`,
+            'Apply the concepts to real-world scenarios',
+            'Demonstrate understanding through hands-on activities'
+          ]
+        },
+        coreConcepts: {
+          durationMinutes: 12,
+          concepts: [
+            {
+              title: 'Core Concept 1',
+              explanation: `The first foundational concept of ${title} involves understanding the basic principles that govern its behavior.`,
+              evidenceQuote: 'Key educational research supports scaffolded learning approaches for this topic.',
+              sourceRef: 'Educational Research Database'
+            },
+            {
+              title: 'Core Concept 2',
+              explanation: `Building on the first concept, learners explore how ${title} is applied in structured environments.`,
+              evidenceQuote: 'Practical application reinforces theoretical understanding.',
+              sourceRef: 'Applied Learning Textbook'
+            },
+            {
+              title: 'Core Concept 3',
+              explanation: 'Advanced applications build upon the core concepts to solve complex, real-world problems.',
+              evidenceQuote: 'Problem-based learning enhances retention and skill transfer.',
+              sourceRef: 'Cognitive Science Journal'
+            }
+          ]
+        },
+        examples: {
+          durationMinutes: 8,
+          items: [
+            {
+              title: 'Example 1: Basic Application',
+              description: `A simple, concrete example demonstrating the first core concept of ${title}.`,
+              realWorldContext: 'This example appears frequently in industry and academic settings.',
+              sourceRef: 'Industry Case Study'
+            },
+            {
+              title: 'Example 2: Intermediate Application',
+              description: `A more complex example combining multiple concepts from ${title}.`,
+              realWorldContext: 'This scenario is common in professional practice.',
+              sourceRef: 'Professional Practice Guide'
+            },
+            {
+              title: 'Example 3: Advanced Application',
+              description: `An advanced example that challenges learners to synthesize all concepts.`,
+              realWorldContext: 'Expert practitioners routinely encounter this type of problem.',
+              sourceRef: 'Expert Practitioner Interview'
+            }
+          ]
+        },
+        practicalDemonstration: {
+          durationMinutes: 8,
+          description: `A step-by-step walkthrough demonstrating ${title} in action.`,
+          steps: [
+            { stepNumber: 1, instruction: `Introduce the problem context related to ${title}`, tip: 'Engage learners with a relatable scenario' },
+            { stepNumber: 2, instruction: 'Identify the key components needed to solve the problem', tip: 'Encourage learners to predict what comes next' },
+            { stepNumber: 3, instruction: 'Apply the core concepts step by step', tip: 'Pause to check understanding at each step' },
+            { stepNumber: 4, instruction: 'Verify the solution and discuss alternatives', tip: 'Ask learners "what if?" questions to deepen understanding' }
+          ]
+        },
+        handsOnActivity: {
+          durationMinutes: 7,
+          title: `${title} Practice Activity`,
+          instructions: `Working individually or in pairs, complete the following activity to reinforce your understanding of ${title}. Apply the core concepts discussed in the lesson to solve the given problem. Document your process and reasoning as you work through each step.`,
+          materials: ['Worksheet or digital document', 'Reference materials from the lesson', 'Problem statement provided by instructor'],
+          expectedOutcome: `Learners will successfully apply ${title} concepts to solve a structured problem, demonstrating understanding of the core principles.`
+        },
+        knowledgeCheck: {
+          durationMinutes: 3,
+          questions: [
+            {
+              questionNumber: 1,
+              question: `Which of the following best describes the primary purpose of ${title}?`,
+              type: 'multiple_choice',
+              options: ['A) To memorize facts', 'B) To apply concepts to solve real problems', 'C) To read about theory only', 'D) To avoid practical application'],
+              correctAnswer: 'B) To apply concepts to solve real problems',
+              explanation: 'The primary goal is practical application of theoretical concepts.'
+            },
+            {
+              questionNumber: 2,
+              question: 'What is the most important prerequisite for understanding the advanced concepts in this lesson?',
+              type: 'multiple_choice',
+              options: ['A) Prior experience only', 'B) Mastery of core concepts 1 and 2', 'C) No prerequisites needed', 'D) Advanced mathematics'],
+              correctAnswer: 'B) Mastery of core concepts 1 and 2',
+              explanation: 'Advanced concepts build directly upon the foundational concepts covered earlier.'
+            },
+            {
+              questionNumber: 3,
+              question: 'True or False: The examples provided in this lesson are purely theoretical with no real-world applications.',
+              type: 'true_false',
+              options: ['True', 'False'],
+              correctAnswer: 'False',
+              explanation: 'All examples are grounded in real-world contexts and industry practice.'
+            },
+            {
+              questionNumber: 4,
+              question: 'During the hands-on activity, what should learners document?',
+              type: 'short_answer',
+              options: [],
+              correctAnswer: 'Their process and reasoning at each step',
+              explanation: 'Documenting the process reinforces metacognitive skills and helps identify areas for improvement.'
+            },
+            {
+              questionNumber: 5,
+              question: 'Which learning approach is most effective for mastering this topic according to research?',
+              type: 'multiple_choice',
+              options: ['A) Passive reading', 'B) Rote memorization', 'C) Problem-based learning', 'D) Watching videos only'],
+              correctAnswer: 'C) Problem-based learning',
+              explanation: 'Research consistently shows that problem-based learning enhances retention and skill transfer.'
+            }
+          ]
+        },
+        summary: {
+          durationMinutes: 2,
+          keyTakeaways: [
+            `${title} involves understanding and applying a set of core concepts to solve structured problems`,
+            'Practical application through examples and hands-on activities is essential for mastery',
+            'Problem-based learning is the most effective approach for this topic',
+            'Real-world context makes abstract concepts more accessible and memorable'
+          ],
+          nextSteps: `Explore advanced topics in ${title} through additional reading, practice problems, and real-world projects. Consider joining study groups or online communities focused on this subject.`
+        }
+      },
+      youtubeVideos: [
+        {
+          title: `Introduction to ${title} — Comprehensive Guide`,
+          url: 'https://www.youtube.com/watch?v=example1',
+          channelName: 'Educational Channel',
+          durationDescription: '15 min',
+          relevance: `Provides a comprehensive visual introduction to ${title} with examples`
+        },
+        {
+          title: `${title} Tutorial for Beginners`,
+          url: 'https://www.youtube.com/watch?v=example2',
+          channelName: 'Learning Hub',
+          durationDescription: '20 min',
+          relevance: 'Step-by-step tutorial ideal for reinforcing the hands-on activity'
+        }
+      ],
+      references: [
+        {
+          title: `${title}: Principles and Practice`,
+          url: 'https://example.com/textbook',
+          sourceType: 'book',
+          description: 'Authoritative textbook covering all aspects of this topic'
+        },
+        {
+          title: `Online Guide to ${title}`,
+          url: 'https://example.com/guide',
+          sourceType: 'web',
+          description: 'Comprehensive online resource with interactive examples'
+        }
+      ],
+      generatedAt: new Date().toISOString()
+    });
+  }
+
+  // If asking for QC review
+  if (text.includes('factual accuracy') || text.includes('instructional quality') || text.includes('QC Agent')) {
+    return JSON.stringify({
+      issues: [
+        {
+          issueNumber: 1,
+          description: 'Operating in fallback mode — real LLM API key required for accurate QC analysis',
+          severity: 'info',
+          affectedSection: 'all',
+          suggestedImprovement: 'Configure a valid GROQ_API_KEY to enable real QC analysis',
+          evidenceRef: ''
+        }
+      ],
+      scores: {
+        factualCorrectness: 75,
+        sourceCitation: 70,
+        evidenceSupport: 70,
+        objectiveAlignment: 75,
+        explanationClarity: 75,
+        logicalStructure: 80,
+        practicalRelevance: 75,
+        assessmentQuality: 70,
+        durationCompliance: 100,
+        overall: 75
+      },
+      summary: 'QC running in fallback mode. Configure a real API key for accurate analysis.',
+      recommendation: 'PASS (fallback mode — configure API key for real QC)'
+    });
+  }
+
   return 'Operating in fallback mode with hallucinated data. LLM gateway is ready for real Groq API keys.';
 }
 

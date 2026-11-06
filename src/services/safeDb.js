@@ -9,9 +9,11 @@
  */
 
 const mongoose = require('mongoose');
-const ResearchSession = require('../models/ResearchSession');
-const ResearchSource  = require('../models/ResearchSource');
-const AgentExecution  = require('../models/AgentExecution');
+const ResearchSession  = require('../models/ResearchSession');
+const ResearchSource   = require('../models/ResearchSource');
+const AgentExecution   = require('../models/AgentExecution');
+const GeneratedLesson  = require('../models/GeneratedLesson');
+const QcReport         = require('../models/QcReport');
 
 const Lesson = require('../models/Lesson');
 
@@ -20,6 +22,8 @@ const memStore = {
   sessions: new Map(),
   sources: [],
   executions: new Map(),
+  generatedLessons: new Map(),
+  qcReports: new Map(),
 };
 
 function isDbConnected() {
@@ -271,6 +275,120 @@ async function findLessonById(id) {
   return memStore.lessons.get(id.toString()) || null;
 }
 
+// ── Generated Lessons ─────────────────────────────────────────────────────────
+
+async function saveGeneratedLesson(data) {
+  if (isDbConnected()) {
+    try {
+      const doc = await GeneratedLesson.create(data);
+      return doc.toObject ? doc.toObject() : doc;
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB save GeneratedLesson failed:', err.message);
+    }
+  }
+
+  const id = generateId();
+  const lesson = { _id: id, ...data, createdAt: new Date(), updatedAt: new Date() };
+  memStore.generatedLessons.set(id, lesson);
+  return lesson;
+}
+
+async function findGeneratedLessonById(id) {
+  if (isDbConnected()) {
+    try {
+      const doc = await GeneratedLesson.findById(id).lean();
+      if (doc) return doc;
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB findGeneratedLessonById failed:', err.message);
+    }
+  }
+  return memStore.generatedLessons.get(id?.toString()) || null;
+}
+
+async function listGeneratedLessons(limit = 20) {
+  if (isDbConnected()) {
+    try {
+      return await GeneratedLesson.find().sort({ createdAt: -1 }).limit(limit).lean();
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB listGeneratedLessons failed:', err.message);
+    }
+  }
+  return Array.from(memStore.generatedLessons.values())
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, limit);
+}
+
+async function updateGeneratedLesson(id, updateData) {
+  if (isDbConnected()) {
+    try {
+      const doc = await GeneratedLesson.findByIdAndUpdate(id, updateData, { new: true }).lean();
+      if (doc) return doc;
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB updateGeneratedLesson failed:', err.message);
+    }
+  }
+  const existing = memStore.generatedLessons.get(id?.toString()) || {};
+  const updated = { ...existing, ...updateData, updatedAt: new Date() };
+  memStore.generatedLessons.set(id?.toString(), updated);
+  return updated;
+}
+
+// ── QC Reports ────────────────────────────────────────────────────────────────
+
+async function saveQcReport(data) {
+  if (isDbConnected()) {
+    try {
+      const doc = await QcReport.create(data);
+      return doc.toObject ? doc.toObject() : doc;
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB save QcReport failed:', err.message);
+    }
+  }
+
+  const id = generateId();
+  const report = { _id: id, ...data, createdAt: new Date(), updatedAt: new Date() };
+  memStore.qcReports.set(id, report);
+  return report;
+}
+
+async function findQcReportById(id) {
+  if (isDbConnected()) {
+    try {
+      const doc = await QcReport.findById(id).lean();
+      if (doc) return doc;
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB findQcReportById failed:', err.message);
+    }
+  }
+  return memStore.qcReports.get(id?.toString()) || null;
+}
+
+async function findQcReportsByLesson(generatedLessonId) {
+  if (isDbConnected()) {
+    try {
+      return await QcReport.find({ generatedLessonId }).sort({ createdAt: -1 }).lean();
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB findQcReportsByLesson failed:', err.message);
+    }
+  }
+  return Array.from(memStore.qcReports.values())
+    .filter(r => r.generatedLessonId?.toString() === generatedLessonId?.toString())
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+async function listQcReports(limit = 20) {
+  if (isDbConnected()) {
+    try {
+      return await QcReport.find().sort({ createdAt: -1 }).limit(limit).lean();
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB listQcReports failed:', err.message);
+    }
+  }
+  return Array.from(memStore.qcReports.values())
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, limit);
+}
+
 module.exports = {
   isDbConnected,
   createLessonDoc,
@@ -286,4 +404,14 @@ module.exports = {
   updateExecution,
   findExecutionById,
   listExecutions,
+  // Generated Lessons
+  saveGeneratedLesson,
+  findGeneratedLessonById,
+  listGeneratedLessons,
+  updateGeneratedLesson,
+  // QC Reports
+  saveQcReport,
+  findQcReportById,
+  findQcReportsByLesson,
+  listQcReports,
 };

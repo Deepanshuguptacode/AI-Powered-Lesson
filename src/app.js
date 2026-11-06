@@ -2,9 +2,11 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 
-const lessonRoutes   = require('./routes/lessonRoutes');
-const researchRoutes = require('./routes/researchRoutes');
-const agentRoutes    = require('./routes/agentRoutes');
+const lessonRoutes          = require('./routes/lessonRoutes');
+const researchRoutes        = require('./routes/researchRoutes');
+const agentRoutes           = require('./routes/agentRoutes');
+const lessonGeneratorRoutes = require('./routes/lessonGeneratorRoutes');
+const qcRoutes              = require('./routes/qcRoutes');
 const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
 
 const app = express();
@@ -31,9 +33,11 @@ app.get('/api/health', (req, res) => {
 });
 
 // API Routes
-app.use('/api/lessons',  lessonRoutes);
-app.use('/api/research', researchRoutes);
-app.use('/api/agent',    agentRoutes);
+app.use('/api/lessons',   lessonRoutes);
+app.use('/api/research',  researchRoutes);
+app.use('/api/agent',     agentRoutes);
+app.use('/api/generate',  lessonGeneratorRoutes);
+app.use('/api/qc',        qcRoutes);
 
 // Fallback to index.html for root if needed (though express.static serves index.html by default)
 app.get('/', (req, res) => {
