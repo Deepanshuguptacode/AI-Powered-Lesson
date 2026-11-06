@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Lesson Creation Tool — Research Engine & Multi-Agent Workspace</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            <path d="M12 6l2 4 4 .5-3 3 .8 4.5-3.8-2-3.8 2 .8-4.5-3-3 4-.5z"></path>
+          </svg>
+        </div>
+        <div>
+          <h1>AI Lesson Creation Tool <span class="header-badge">Stage 2 & 3: Research Engine</span></h1>
+          <p class="tagline">Multi-Agent System powered by LangGraph.js and Groq LLM Gateway (GPT OSS Models)</p>
+        </div>
+      </div>
+      
+      <!-- System & Gateway Indicators -->
+      <div class="header-status-group">
+        <div class="system-status" id="gatewayStatus" title="Groq LLM Gateway">
+          <span class="status-dot connected"></span>
+          <span class="status-label">Groq LLM:</span>
+          <span class="status-text" id="gatewayModelText">openai/gpt-oss-120b</span>
+          <span class="badge badge-tokens" id="tokenUsageBadge">0 Tokens</span>
+        </div>
+        <div class="system-status" id="systemStatus">
+          <span class="status-dot connected"></span>
+          <span class="status-text" id="statusText">System Ready</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Notification Alert Banner -->
+    <div id="alertBox" class="alert hidden" role="alert">
+      <span class="alert-icon" id="alertIcon"></span>
+      <span class="alert-message" id="alertMessage"></span>
+      <button class="alert-close" id="alertCloseBtn" aria-label="Close alert">&times;</button>
+    </div>
+
+    <!-- Main Content Layout Grid -->
+    <main class="main-content">
+      <!-- Left Column: Input Form & Agent Controller -->
+      <aside class="left-panel">
+        <!-- Section 1: Lesson Input Card -->
+        <section class="card form-card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2>Lesson Definition & Research Setup</h2>
+              <p class="card-subtitle">Input your topic and objective for multi-agent investigation</p>
+            </div>
+          </div>
+
+          <form id="lessonForm" class="lesson-form" novalidate>
+            <!-- Lesson Title -->
+            <div class="form-group">
+              <label for="lessonTitle">
+                Lesson Title <span class="required">*</span>
+              </label>
+              <div class="input-wrapper">
+                <input
+                  type="text"
+                  id="lessonTitle"
+                  name="title"
+                  placeholder="e.g. Introduction to Photosynthesis"
+                  maxlength="150"
+                  required
+                  autocomplete="off"
+                  value="Introduction to Photosynthesis"
+                />
+              </div>
+              <div class="field-footer">
+                <span class="field-hint">Educational subject or topic title</span>
+                <span class="char-count" id="titleCount">30 / 150</span>
+              </div>
+            </div>
+
+            <!-- Learning Objective -->
+            <div class="form-group">
+              <label for="learningObjective">
+                Learning Objective <span class="required">*</span>
+              </label>
+              <div class="input-wrapper">
+                <textarea
+                  id="learningObjective"
+                  name="learningObjective"
+                  rows="4"
+                  placeholder="e.g. Explain the light-dependent reactions and the Calvin cycle in plant chloroplasts."
+                  maxlength="2000"
+                  required
+                >Explain the light-dependent reactions and the Calvin cycle occurring inside plant chloroplasts, detailing ATP/NADPH synthesis and carbon fixation.</textarea>
+              </div>
+              <div class="field-footer">
+                <span class="field-hint">Target competencies & concepts for the agents to research</span>
+                <span class="char-count" id="objectiveCount">142 / 2000</span>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="form-actions-stack">
+              <button type="button" id="startAgentResearchBtn" class="btn btn-primary btn-large">
+                <span class="btn-spinner hidden" id="agentSpinner"></span>
+                <span class="btn-icon" id="agentIcon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                  </svg>
+                </span>
+                <span class="btn-text" id="agentBtnText">Run LangGraph Multi-Agent Research</span>
+              </button>
+
+              <div class="action-sub-row">
+                <button type="button" id="startDirectResearchBtn" class="btn btn-secondary" title="Direct Stage 2 Parallel Research API">
+                  <span class="btn-spinner hidden" id="directSpinner"></span>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  <span>Direct Research API</span>
+                </button>
+                <button type="button" id="saveLessonBtn" class="btn btn-secondary" title="Save draft lesson definition">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                  <span>Save Draft</span>
+                </button>
+                <button type="button" id="clearBtn" class="btn btn-ghost">Reset</button>
+              </div>
+            </div>
+          </form>
+
+          <!-- Gateway & Pool Information Card -->
+          <div class="gateway-info-box">
+            <div class="info-row">
+              <span class="info-label">LLM Provider:</span>
+              <span class="info-val">Groq (OpenAI-compatible)</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Active Model:</span>
+              <span class="info-val" id="gwModelDetail">openai/gpt-oss-120b</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Key Pool:</span>
+              <span class="info-val" id="gwKeyPoolDetail">1 Key Active (Auto-Failover enabled)</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Fault Policy:</span>
+              <span class="info-val text-success">Hallucination Fallback on Missing Data</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 2: Saved Lessons List -->
+        <section class="card list-card">
+          <div class="card-header list-header">
+            <div>
+              <h3>Saved Lessons</h3>
+              <p class="card-subtitle">Select to research or review</p>
+            </div>
+            <div class="list-controls">
+              <span class="badge badge-count" id="lessonCountBadge">0 Lessons</span>
+              <button id="refreshBtn" class="btn-icon-only" title="Refresh saved lessons" aria-label="Refresh lessons">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+              </button>
+            </div>
+          </div>
+          <div class="lessons-container" id="lessonsContainer">
+            <!-- Rendered by app.js -->
+          </div>
+        </section>
+      </aside>
+
+      <!-- Right Column: Interactive Multi-Agent Research Workspace -->
+      <section class="right-panel">
+        <!-- Live Agent Execution Tracker Card -->
+        <div class="card agent-tracker-card" id="trackerCard">
+          <div class="card-header tracker-header">
+            <div class="tracker-title-group">
+              <h2>LangGraph Multi-Agent Architecture</h2>
+              <span class="status-pill status-ready" id="executionStatusPill">Ready</span>
+            </div>
+            <div class="tracker-metrics">
+              <span class="metric-item" id="durationMetric">⏱️ 0ms</span>
+              <span class="metric-item" id="sourcesMetric">📦 0 Sources</span>
+              <span class="metric-item" id="tokenMetric">⚡ 0 Tokens</span>
+            </div>
+          </div>
+
+          <!-- Multi-Agent Visual Pipeline -->
+          <div class="agent-nodes-grid">
+            <!-- Node 1: Supervisor -->
+            <div class="agent-node" id="nodeSupervisor">
+              <div class="node-icon">🧑‍🏫</div>
+              <div class="node-info">
+                <h4>Supervisor Agent</h4>
+                <p class="node-role">ReAct Decomposer & Synthesizer</p>
+                <span class="node-status" id="statusSupervisor">Idle</span>
+              </div>
+            </div>
+
+            <!-- Node 2: Web Research -->
+            <div class="agent-node" id="nodeWeb">
+              <div class="node-icon">🌐</div>
+              <div class="node-info">
+                <h4>Web Agent</h4>
+                <p class="node-role">Brave / DuckDuckGo Search</p>
+                <span class="node-status" id="statusWeb">Idle</span>
+              </div>
+            </div>
+
+            <!-- Node 3: Book Research -->
+            <div class="agent-node" id="nodeBook">
+              <div class="node-icon">📚</div>
+              <div class="node-info">
+                <h4>Book Agent</h4>
+                <p class="node-role">Google Books & Open Library</p>
+                <span class="node-status" id="statusBook">Idle</span>
+              </div>
+            </div>
+
+            <!-- Node 4: YouTube Research -->
+            <div class="agent-node" id="nodeYoutube">
+              <div class="node-icon">📺</div>
+              <div class="node-info">
+                <h4>YouTube Agent</h4>
+                <p class="node-role">Video Data API & Transcripts</p>
+                <span class="node-status" id="statusYoutube">Idle</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Research Results & Evidence Explorer Card -->
+        <div class="card results-card" id="resultsCard">
+          <!-- Workspace Tabs Header -->
+          <div class="results-tabs-bar">
+            <button class="tab-btn active" data-tab="tab-evidence" id="tabBtnEvidence">
+              🎯 Extracted Evidence <span class="tab-count" id="countEvidence">0</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-web" id="tabBtnWeb">
+              🌐 Web Sources <span class="tab-count" id="countWeb">0</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-books" id="tabBtnBooks">
+              📚 Books <span class="tab-count" id="countBooks">0</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-youtube" id="tabBtnYoutube">
+              📺 YouTube Videos <span class="tab-count" id="countYoutube">0</span>
+            </button>
+            <button class="tab-btn" data-tab="tab-logs" id="tabBtnLogs">
+              🤖 Agent ReAct Logs <span class="tab-count" id="countLogs">0</span>
+            </button>
+          </div>
+
+          <!-- Tab 1: Extracted Evidence -->
+          <div class="tab-content active" id="tab-evidence">
+            <div class="evidence-toolbar">
+              <div class="evidence-summary" id="evidenceSummaryText">
+                Run Multi-Agent research to extract pedagogical evidence across web, books, and video lectures.
+              </div>
+            </div>
+            <div class="evidence-list" id="evidenceList">
+              <div class="placeholder-box">
+                <p>No research evidence gathered yet. Click <strong>"Run LangGraph Multi-Agent Research"</strong> to begin.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Web Sources -->
+          <div class="tab-content" id="tab-web">
+            <div class="sources-grid" id="webSourcesGrid">
+              <div class="placeholder-box">
+                <p>No web sources collected yet.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 3: Books -->
+          <div class="tab-content" id="tab-books">
+            <div class="sources-grid" id="bookSourcesGrid">
+              <div class="placeholder-box">
+                <p>No book sources collected yet.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 4: YouTube Videos -->
+          <div class="tab-content" id="tab-youtube">
+            <div class="sources-grid" id="youtubeSourcesGrid">
+              <div class="placeholder-box">
+                <p>No video sources collected yet.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 5: Agent ReAct Trace Logs -->
+          <div class="tab-content" id="tab-logs">
+            <div class="logs-header-bar">
+              <span>LangGraph Execution Trace (Reasoning &rarr; Actions &rarr; Observations)</span>
+              <button class="btn-text-only" id="copyLogsBtn">Copy Raw Log JSON</button>
+            </div>
+            <div class="react-log-container" id="reactLogContainer">
+              <div class="placeholder-box">
+                <p>Execution trace will stream here when an agent workflow executes.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>AI Lesson Creation Tool &bull; Stage 2 & 3 Complete &bull; LangGraph.js Multi-Agent System with Groq LLM Gateway &bull; <a href="/api/health" target="_blank">Health Check</a> &bull; <a href="/api/agent/gateway/stats" target="_blank">Gateway Stats</a></p>
+    </footer>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
