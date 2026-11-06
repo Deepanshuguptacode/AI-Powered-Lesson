@@ -82,6 +82,26 @@ const qcReportSchema = new mongoose.Schema(
       default: 'running',
     },
 
+    // Outdated tracking (flagged when associated lesson version changes)
+    isOutdated: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    lessonVersion: {
+      type: Number,
+      default: 1,
+      index: true,
+    },
+    outdatedReason: {
+      type: String,
+      default: null,
+    },
+    outdatedAt: {
+      type: Date,
+      default: null,
+    },
+
     scores: { type: qcScoreSchema, default: () => ({}) },
 
     // Detailed issues found

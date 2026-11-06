@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Lesson Creation Tool — Research Engine & Multi-Agent Workspace</title>
+  <title>AI Lesson Creation Tool — Multi-Agent Orchestration & Instructor Dashboard</title>
   <link rel="stylesheet" href="css/style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="app-container">
-    <!-- Header -->
+    <!-- Top Header -->
     <header class="app-header">
       <div class="header-brand">
         <div class="brand-icon">
@@ -22,16 +22,21 @@
           </svg>
         </div>
         <div>
-          <h1>AI Lesson Creation Tool <span class="header-badge">Stage 2 & 3: Research Engine</span></h1>
-          <p class="tagline">Multi-Agent System powered by LangGraph.js and Groq LLM Gateway (GPT OSS Models)</p>
+          <h1>AI Lesson Creation Tool <span class="header-badge">Stages 1–6 Complete</span></h1>
+          <p class="tagline">LangGraph.js Orchestration &bull; Input Guardrails (openai/gpt-oss-20b) &bull; Instructor Dashboard &bull; Versioned QC</p>
         </div>
       </div>
       
       <!-- System & Gateway Indicators -->
       <div class="header-status-group">
+        <div class="system-status" id="guardrailModelStatus" title="Input Guardrails Model">
+          <span class="status-dot connected"></span>
+          <span class="status-label">Guardrail:</span>
+          <span class="status-text text-accent">openai/gpt-oss-20b</span>
+        </div>
         <div class="system-status" id="gatewayStatus" title="Groq LLM Gateway">
           <span class="status-dot connected"></span>
-          <span class="status-label">Groq LLM:</span>
+          <span class="status-label">Synthesizer:</span>
           <span class="status-text" id="gatewayModelText">openai/gpt-oss-120b</span>
           <span class="badge badge-tokens" id="tokenUsageBadge">0 Tokens</span>
         </div>
@@ -42,6 +47,23 @@
       </div>
     </header>
 
+    <!-- Global Navigation Tabs -->
+    <nav class="main-nav-tabs">
+      <button class="nav-tab active" data-view="view-orchestrator" id="navOrchestrator">
+        <span class="tab-icon">⚡</span> Live AI Architecture
+      </button>
+      <button class="nav-tab" data-view="view-dashboard" id="navDashboard">
+        <span class="tab-icon">🧑‍🏫</span> Instructor Dashboard & Editor
+        <span class="nav-badge" id="dashboardVersionBadge">v1.0</span>
+      </button>
+      <button class="nav-tab" data-view="view-preview" id="navPreview">
+        <span class="tab-icon">👁️</span> 45-Min Lesson Preview
+      </button>
+      <button class="nav-tab" data-view="view-research" id="navResearch">
+        <span class="tab-icon">🎯</span> Evidence & Research Explorer
+      </button>
+    </nav>
+
     <!-- Notification Alert Banner -->
     <div id="alertBox" class="alert hidden" role="alert">
       <span class="alert-icon" id="alertIcon"></span>
@@ -51,15 +73,16 @@
 
     <!-- Main Content Layout Grid -->
     <main class="main-content">
-      <!-- Left Column: Input Form & Agent Controller -->
+      <!-- Left Column: Input Form & Stage Controller -->
       <aside class="left-panel">
-        <!-- Section 1: Lesson Input Card -->
+        <!-- Section 1: Lesson Input & Guardrail Card -->
         <section class="card form-card">
           <div class="card-header">
             <div class="card-title-group">
-              <h2>Lesson Definition & Research Setup</h2>
-              <p class="card-subtitle">Input your topic and objective for multi-agent investigation</p>
+              <h2>Lesson Definition</h2>
+              <p class="card-subtitle">Topic & Learning Objective with AI Guardrails</p>
             </div>
+            <span class="guardrail-badge safe" id="guardrailQuickPill">🛡️ Guardrail: Ready</span>
           </div>
 
           <form id="lessonForm" class="lesson-form" novalidate>
@@ -73,16 +96,16 @@
                   type="text"
                   id="lessonTitle"
                   name="title"
-                  placeholder="e.g. Introduction to Photosynthesis"
+                  placeholder="e.g. Introduction to Binary Search"
                   maxlength="150"
                   required
                   autocomplete="off"
-                  value="Introduction to Photosynthesis"
+                  value="Introduction to Binary Search in Python"
                 />
               </div>
               <div class="field-footer">
-                <span class="field-hint">Educational subject or topic title</span>
-                <span class="char-count" id="titleCount">30 / 150</span>
+                <span class="field-hint">Educational subject or curriculum topic</span>
+                <span class="char-count" id="titleCount">39 / 150</span>
               </div>
             </div>
 
@@ -95,72 +118,70 @@
                 <textarea
                   id="learningObjective"
                   name="learningObjective"
-                  rows="4"
-                  placeholder="e.g. Explain the light-dependent reactions and the Calvin cycle in plant chloroplasts."
+                  rows="3"
+                  placeholder="e.g. Students will implement binary search with logarithmic time complexity."
                   maxlength="2000"
                   required
-                >Explain the light-dependent reactions and the Calvin cycle occurring inside plant chloroplasts, detailing ATP/NADPH synthesis and carbon fixation.</textarea>
+                >Understand divide-and-conquer search, implement binary search in O(log n) time, and avoid integer overflow in midpoint calculation.</textarea>
               </div>
               <div class="field-footer">
-                <span class="field-hint">Target competencies & concepts for the agents to research</span>
+                <span class="field-hint">Target educational competencies</span>
                 <span class="char-count" id="objectiveCount">142 / 2000</span>
               </div>
             </div>
 
-            <!-- Action Buttons -->
+            <!-- Live Guardrail Status Box -->
+            <div class="guardrail-status-box" id="guardrailStatusBox">
+              <div class="guardrail-header">
+                <span class="guardrail-title">🛡️ Input Guardrail (openai/gpt-oss-20b)</span>
+                <span class="guardrail-pill status-ready" id="guardrailVerdictPill">Not Evaluated</span>
+              </div>
+              <div class="guardrail-metrics-row">
+                <div class="guardrail-metric">
+                  <span class="gm-label">Safety:</span>
+                  <span class="gm-val" id="gmSafety">--</span>
+                </div>
+                <div class="guardrail-metric">
+                  <span class="gm-label">Injection Risk:</span>
+                  <span class="gm-val" id="gmInjection">--</span>
+                </div>
+                <div class="guardrail-metric">
+                  <span class="gm-label">Educational:</span>
+                  <span class="gm-val" id="gmEdu">--</span>
+                </div>
+              </div>
+              <div class="guardrail-detail-text" id="guardrailDetailText">
+                Input will be scanned using openai/gpt-oss-20b before downstream agents execute.
+              </div>
+            </div>
+
+            <!-- Action Buttons Stack -->
             <div class="form-actions-stack">
-              <button type="button" id="startAgentResearchBtn" class="btn btn-primary btn-large">
-                <span class="btn-spinner hidden" id="agentSpinner"></span>
-                <span class="btn-icon" id="agentIcon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                  </svg>
-                </span>
-                <span class="btn-text" id="agentBtnText">Run LangGraph Multi-Agent Research</span>
+              <button type="button" id="startFullOrchestrationBtn" class="btn btn-primary btn-large btn-glow">
+                <span class="btn-spinner hidden" id="orchSpinner"></span>
+                <span class="btn-icon">⚡</span>
+                <span class="btn-text" id="orchBtnText">Run Live AI Orchestration (End-to-End)</span>
               </button>
 
               <div class="action-sub-row">
-                <button type="button" id="startDirectResearchBtn" class="btn btn-secondary" title="Direct Stage 2 Parallel Research API">
-                  <span class="btn-spinner hidden" id="directSpinner"></span>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                  <span>Direct Research API</span>
+                <button type="button" id="checkGuardrailsBtn" class="btn btn-secondary" title="Check Guardrails with openai/gpt-oss-20b">
+                  <span>🛡️ Test Guardrail</span>
                 </button>
-                <button type="button" id="saveLessonBtn" class="btn btn-secondary" title="Save draft lesson definition">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-                  <span>Save Draft</span>
+                <button type="button" id="generateLessonOnlyBtn" class="btn btn-secondary" title="Synthesize 45-Min Lesson">
+                  <span>📖 Generate Lesson</span>
                 </button>
                 <button type="button" id="clearBtn" class="btn btn-ghost">Reset</button>
               </div>
             </div>
           </form>
-
-          <!-- Gateway & Pool Information Card -->
-          <div class="gateway-info-box">
-            <div class="info-row">
-              <span class="info-label">LLM Provider:</span>
-              <span class="info-val">Groq (OpenAI-compatible)</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Active Model:</span>
-              <span class="info-val" id="gwModelDetail">openai/gpt-oss-120b</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Key Pool:</span>
-              <span class="info-val" id="gwKeyPoolDetail">1 Key Active (Auto-Failover enabled)</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Fault Policy:</span>
-              <span class="info-val text-success">Hallucination Fallback on Missing Data</span>
-            </div>
-          </div>
         </section>
 
-        <!-- Section 2: Saved Lessons List -->
+        <!-- Section 2: Saved Lessons List with Version & Approval Badges -->
         <section class="card list-card">
           <div class="card-header list-header">
             <div>
-              <h3>Saved Lessons</h3>
-              <p class="card-subtitle">Select to research or review</p>
+              <h3>Saved Lessons & Versions</h3>
+              <p class="card-subtitle">Select to review in Instructor Dashboard</p>
             </div>
             <div class="list-controls">
               <span class="badge badge-count" id="lessonCountBadge">0 Lessons</span>
@@ -175,147 +196,628 @@
         </section>
       </aside>
 
-      <!-- Right Column: Interactive Multi-Agent Research Workspace -->
+      <!-- Right Column: Multi-View Area -->
       <section class="right-panel">
-        <!-- Live Agent Execution Tracker Card -->
-        <div class="card agent-tracker-card" id="trackerCard">
-          <div class="card-header tracker-header">
-            <div class="tracker-title-group">
-              <h2>LangGraph Multi-Agent Architecture</h2>
-              <span class="status-pill status-ready" id="executionStatusPill">Ready</span>
-            </div>
-            <div class="tracker-metrics">
-              <span class="metric-item" id="durationMetric">⏱️ 0ms</span>
-              <span class="metric-item" id="sourcesMetric">📦 0 Sources</span>
-              <span class="metric-item" id="tokenMetric">⚡ 0 Tokens</span>
-            </div>
-          </div>
 
-          <!-- Multi-Agent Visual Pipeline -->
-          <div class="agent-nodes-grid">
-            <!-- Node 1: Supervisor -->
-            <div class="agent-node" id="nodeSupervisor">
-              <div class="node-icon">🧑‍🏫</div>
-              <div class="node-info">
-                <h4>Supervisor Agent</h4>
-                <p class="node-role">ReAct Decomposer & Synthesizer</p>
-                <span class="node-status" id="statusSupervisor">Idle</span>
+        <!-- ================================================================= -->
+        <!-- VIEW 1: LIVE AI ORCHESTRATION ARCHITECTURE (Real-Time Live State) -->
+        <!-- ================================================================= -->
+        <div class="view-panel active" id="view-orchestrator">
+          <div class="card architecture-card">
+            <div class="card-header arch-header">
+              <div class="arch-title-group">
+                <h2>AI Orchestration Layer Architecture (Live Tracker)</h2>
+                <p class="card-subtitle">Real-time execution map showing current stage, active node, and model telemetry</p>
+              </div>
+              <div class="arch-live-indicator">
+                <span class="live-pulse-dot"></span>
+                <span class="live-status-label" id="liveStageLabel">System Ready &bull; Idle</span>
               </div>
             </div>
 
-            <!-- Node 2: Web Research -->
-            <div class="agent-node" id="nodeWeb">
-              <div class="node-icon">🌐</div>
-              <div class="node-info">
-                <h4>Web Agent</h4>
-                <p class="node-role">Brave / DuckDuckGo Search</p>
-                <span class="node-status" id="statusWeb">Idle</span>
+            <!-- Live Status Ticker Bar -->
+            <div class="orchestration-ticker-bar" id="tickerBar">
+              <span class="ticker-badge" id="tickerStageBadge">STAGE 0: IDLE</span>
+              <span class="ticker-message" id="tickerMessage">Ready to launch end-to-end multi-agent orchestration pipeline.</span>
+              <span class="ticker-timer" id="tickerTimer">0.0s</span>
+            </div>
+
+            <!-- Complete Architecture Diagram Flowchart -->
+            <div class="architecture-diagram-container">
+              <!-- Stage 1: Input Guardrails -->
+              <div class="arch-stage-column" data-stage="stage_1">
+                <div class="arch-stage-header">
+                  <span class="stage-num">STAGE 1</span>
+                  <h4>Input Guardrails</h4>
+                  <span class="stage-model-badge">openai/gpt-oss-20b</span>
+                </div>
+                <div class="arch-node" id="node_guardrails">
+                  <div class="node-icon">🛡️</div>
+                  <div class="node-body">
+                    <h5>LLM Safety Guardrail</h5>
+                    <p>Injection &bull; Safety &bull; Academic Scope</p>
+                    <span class="node-state-pill" id="state_guardrails">Idle</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Animated Connector 1 -->
+              <div class="arch-connector" id="conn_1_2">
+                <div class="connector-line"></div>
+                <div class="connector-arrow">▶</div>
+              </div>
+
+              <!-- Stage 2: Supervisor & Planning -->
+              <div class="arch-stage-column" data-stage="stage_2">
+                <div class="arch-stage-header">
+                  <span class="stage-num">STAGE 2</span>
+                  <h4>Supervisor Agent</h4>
+                  <span class="stage-model-badge">LangGraph.js ReAct</span>
+                </div>
+                <div class="arch-node" id="node_supervisor">
+                  <div class="node-icon">🧑‍🏫</div>
+                  <div class="node-body">
+                    <h5>ReAct Decomposer</h5>
+                    <p>Query Formulation & Task Plan</p>
+                    <span class="node-state-pill" id="state_supervisor">Idle</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Animated Connector 2 -->
+              <div class="arch-connector" id="conn_2_3">
+                <div class="connector-line"></div>
+                <div class="connector-arrow">▶</div>
+              </div>
+
+              <!-- Stage 3: Multi-Agent Parallel Research -->
+              <div class="arch-stage-column" data-stage="stage_3">
+                <div class="arch-stage-header">
+                  <span class="stage-num">STAGE 3</span>
+                  <h4>Multi-Agent Swarm</h4>
+                  <span class="stage-model-badge">Parallel Tools</span>
+                </div>
+                <div class="arch-subnodes-stack" id="node_research_swarm">
+                  <div class="arch-subnode" id="node_web_agent">
+                    <span class="sn-icon">🌐</span>
+                    <span class="sn-title">Web Agent (DuckDuckGo)</span>
+                    <span class="sn-state" id="state_web">Idle</span>
+                  </div>
+                  <div class="arch-subnode" id="node_book_agent">
+                    <span class="sn-icon">📚</span>
+                    <span class="sn-title">Book Agent (Google Books)</span>
+                    <span class="sn-state" id="state_book">Idle</span>
+                  </div>
+                  <div class="arch-subnode" id="node_youtube_agent">
+                    <span class="sn-icon">📺</span>
+                    <span class="sn-title">YouTube Agent (Transcripts)</span>
+                    <span class="sn-state" id="state_youtube">Idle</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Animated Connector 3 -->
+              <div class="arch-connector" id="conn_3_4">
+                <div class="connector-line"></div>
+                <div class="connector-arrow">▶</div>
+              </div>
+
+              <!-- Stage 4: 45-Min Lesson Synthesizer -->
+              <div class="arch-stage-column" data-stage="stage_4">
+                <div class="arch-stage-header">
+                  <span class="stage-num">STAGE 4</span>
+                  <h4>Lesson Generator</h4>
+                  <span class="stage-model-badge">openai/gpt-oss-120b</span>
+                </div>
+                <div class="arch-node" id="node_lesson_generator">
+                  <div class="node-icon">📖</div>
+                  <div class="node-body">
+                    <h5>45-Min Synthesizer</h5>
+                    <p>7 Sections &bull; Evidence Quotes</p>
+                    <span class="node-state-pill" id="state_generator">Idle</span>
+                  </div>
+                </div>
+                <div class="arch-subnode mt-2" id="node_validator">
+                  <span class="sn-icon">⏱️</span>
+                  <span class="sn-title">45-Min Duration Validator (Strict)</span>
+                  <span class="sn-state" id="state_validator">Idle</span>
+                </div>
+              </div>
+
+              <!-- Animated Connector 4 -->
+              <div class="arch-connector" id="conn_4_5">
+                <div class="connector-line"></div>
+                <div class="connector-arrow">▶</div>
+              </div>
+
+              <!-- Stage 5: Independent Parallel QC Auditors -->
+              <div class="arch-stage-column" data-stage="stage_5">
+                <div class="arch-stage-header">
+                  <span class="stage-num">STAGE 5</span>
+                  <h4>Parallel QC Auditors</h4>
+                  <span class="stage-model-badge">Promise.allSettled()</span>
+                </div>
+                <div class="arch-subnodes-stack" id="node_qc_parallel">
+                  <div class="arch-subnode" id="node_qc_factual">
+                    <span class="sn-icon">🔬</span>
+                    <span class="sn-title">QC 1: Factual Accuracy</span>
+                    <span class="sn-state" id="state_qc_factual">Idle</span>
+                  </div>
+                  <div class="arch-subnode" id="node_qc_instructional">
+                    <span class="sn-icon">📚</span>
+                    <span class="sn-title">QC 2: Instructional Quality</span>
+                    <span class="sn-state" id="state_qc_instructional">Idle</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Animated Connector 5 -->
+              <div class="arch-connector" id="conn_5_6">
+                <div class="connector-line"></div>
+                <div class="connector-arrow">▶</div>
+              </div>
+
+              <!-- Stage 6: Instructor Dashboard & Approval -->
+              <div class="arch-stage-column" data-stage="stage_6">
+                <div class="arch-stage-header">
+                  <span class="stage-num">STAGE 6</span>
+                  <h4>Instructor Gate</h4>
+                  <span class="stage-model-badge">Human-in-the-Loop</span>
+                </div>
+                <div class="arch-node" id="node_instructor_gate">
+                  <div class="node-icon">🧑‍🏫</div>
+                  <div class="node-body">
+                    <h5>Instructor Review</h5>
+                    <p>Edit &bull; Decide QC &bull; Approve</p>
+                    <span class="node-state-pill" id="state_instructor">Idle</span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- Node 3: Book Research -->
-            <div class="agent-node" id="nodeBook">
-              <div class="node-icon">📚</div>
-              <div class="node-info">
-                <h4>Book Agent</h4>
-                <p class="node-role">Google Books & Open Library</p>
-                <span class="node-status" id="statusBook">Idle</span>
+            <!-- Orchestration Live Telemetry Logs -->
+            <div class="telemetry-panel">
+              <div class="telemetry-header">
+                <span>Live Orchestration Telemetry & Event Log</span>
+                <button class="btn-text-only" id="clearTelemetryBtn">Clear Log</button>
               </div>
-            </div>
-
-            <!-- Node 4: YouTube Research -->
-            <div class="agent-node" id="nodeYoutube">
-              <div class="node-icon">📺</div>
-              <div class="node-info">
-                <h4>YouTube Agent</h4>
-                <p class="node-role">Video Data API & Transcripts</p>
-                <span class="node-status" id="statusYoutube">Idle</span>
+              <div class="telemetry-log-box" id="telemetryLogBox">
+                <div class="telemetry-entry">
+                  <span class="t-time">00:00:00</span>
+                  <span class="t-badge t-ready">READY</span>
+                  <span class="t-msg">Orchestration engine initialized. Click "Run Live AI Orchestration" to start.</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Research Results & Evidence Explorer Card -->
-        <div class="card results-card" id="resultsCard">
-          <!-- Workspace Tabs Header -->
-          <div class="results-tabs-bar">
-            <button class="tab-btn active" data-tab="tab-evidence" id="tabBtnEvidence">
-              🎯 Extracted Evidence <span class="tab-count" id="countEvidence">0</span>
-            </button>
-            <button class="tab-btn" data-tab="tab-web" id="tabBtnWeb">
-              🌐 Web Sources <span class="tab-count" id="countWeb">0</span>
-            </button>
-            <button class="tab-btn" data-tab="tab-books" id="tabBtnBooks">
-              📚 Books <span class="tab-count" id="countBooks">0</span>
-            </button>
-            <button class="tab-btn" data-tab="tab-youtube" id="tabBtnYoutube">
-              📺 YouTube Videos <span class="tab-count" id="countYoutube">0</span>
-            </button>
-            <button class="tab-btn" data-tab="tab-logs" id="tabBtnLogs">
-              🤖 Agent ReAct Logs <span class="tab-count" id="countLogs">0</span>
-            </button>
-          </div>
-
-          <!-- Tab 1: Extracted Evidence -->
-          <div class="tab-content active" id="tab-evidence">
-            <div class="evidence-toolbar">
-              <div class="evidence-summary" id="evidenceSummaryText">
-                Run Multi-Agent research to extract pedagogical evidence across web, books, and video lectures.
+        <!-- ================================================================= -->
+        <!-- VIEW 2: INSTRUCTOR DASHBOARD & LESSON EDITOR (Stage 6)           -->
+        <!-- ================================================================= -->
+        <div class="view-panel" id="view-dashboard">
+          <!-- Lesson Meta & Version Bar -->
+          <div class="card dashboard-meta-card">
+            <div class="dash-meta-header">
+              <div class="lesson-identity-group">
+                <div class="identity-top">
+                  <h2 id="dashLessonTitle">No Lesson Loaded</h2>
+                  <span class="version-tag-badge" id="dashVersionTagBadge">v1.0 (AI Generated)</span>
+                  <span class="approval-tag-badge pending" id="dashApprovalBadge">⏳ Pending Approval</span>
+                </div>
+                <p class="lesson-obj-sub" id="dashLearningObjective">Generate or select a lesson to begin instructor review and editing.</p>
+              </div>
+              
+              <!-- Version Selector & Action Group -->
+              <div class="dash-controls-group">
+                <div class="version-picker">
+                  <label for="versionSelect">Version:</label>
+                  <select id="versionSelect" class="form-select">
+                    <option value="">No versions available</option>
+                  </select>
+                </div>
+                <button type="button" id="approveLessonBtn" class="btn btn-success" title="Grant formal instructor approval">
+                  ✅ Approve Lesson
+                </button>
+                <button type="button" id="saveNewVersionBtn" class="btn btn-primary" title="Save changes as a new version (Never overwrites)">
+                  💾 Save as New Version
+                </button>
+                <button type="button" id="rerunQcBtn" class="btn btn-secondary" title="Re-run both QC agents on current version">
+                  🔄 Re-run QC
+                </button>
               </div>
             </div>
-            <div class="evidence-list" id="evidenceList">
-              <div class="placeholder-box">
-                <p>No research evidence gathered yet. Click <strong>"Run LangGraph Multi-Agent Research"</strong> to begin.</p>
-              </div>
-            </div>
-          </div>
 
-          <!-- Tab 2: Web Sources -->
-          <div class="tab-content" id="tab-web">
-            <div class="sources-grid" id="webSourcesGrid">
-              <div class="placeholder-box">
-                <p>No web sources collected yet.</p>
+            <!-- 45-Min Duration Compliance Banner -->
+            <div class="duration-meter-bar" id="durationMeterBar">
+              <div class="dm-info">
+                <span class="dm-title">45-Minute Lesson Duration Requirement:</span>
+                <span class="dm-status valid" id="dmStatusText">Total: 45 / 45 Minutes (Strictly Compliant)</span>
               </div>
-            </div>
-          </div>
-
-          <!-- Tab 3: Books -->
-          <div class="tab-content" id="tab-books">
-            <div class="sources-grid" id="bookSourcesGrid">
-              <div class="placeholder-box">
-                <p>No book sources collected yet.</p>
+              <div class="dm-breakdown" id="dmBreakdown">
+                Intro: 5m &bull; Concepts: 12m &bull; Examples: 8m &bull; Demo: 8m &bull; Activity: 7m &bull; QC: 3m &bull; Summary: 2m
               </div>
             </div>
           </div>
 
-          <!-- Tab 4: YouTube Videos -->
-          <div class="tab-content" id="tab-youtube">
-            <div class="sources-grid" id="youtubeSourcesGrid">
-              <div class="placeholder-box">
-                <p>No video sources collected yet.</p>
+          <!-- QC Reports Side-by-Side Review Section -->
+          <div class="qc-reports-row">
+            <!-- QC Report 1: Factual Accuracy -->
+            <div class="card qc-report-card" id="qcCardFactual">
+              <div class="card-header qc-card-header">
+                <div class="qc-header-info">
+                  <span class="qc-icon">🔬</span>
+                  <div>
+                    <h3>QC Agent 1: Factual Accuracy</h3>
+                    <p class="card-subtitle">Evidence cross-reference & citations</p>
+                  </div>
+                </div>
+                <div class="qc-score-badge" id="factualScoreBadge">85 / 100 PASS</div>
+              </div>
+
+              <!-- Outdated Warning Banner -->
+              <div class="outdated-banner hidden" id="factualOutdatedBanner">
+                ⚠️ This report is for a previous lesson version and is outdated.
+              </div>
+
+              <div class="qc-metrics-grid">
+                <div class="qcm-item">
+                  <span class="qcm-label">Correctness:</span>
+                  <span class="qcm-val" id="factMetricCorrect">--</span>
+                </div>
+                <div class="qcm-item">
+                  <span class="qcm-label">Citations:</span>
+                  <span class="qcm-val" id="factMetricCitation">--</span>
+                </div>
+                <div class="qcm-item">
+                  <span class="qcm-label">Evidence:</span>
+                  <span class="qcm-val" id="factMetricEvidence">--</span>
+                </div>
+              </div>
+
+              <div class="qc-issues-container" id="factualIssuesList">
+                <div class="placeholder-box">No factual QC issues reported.</div>
+              </div>
+            </div>
+
+            <!-- QC Report 2: Instructional Quality -->
+            <div class="card qc-report-card" id="qcCardInstructional">
+              <div class="card-header qc-card-header">
+                <div class="qc-header-info">
+                  <span class="qc-icon">📚</span>
+                  <div>
+                    <h3>QC Agent 2: Instructional Quality</h3>
+                    <p class="card-subtitle">Pedagogical clarity & 45-min compliance</p>
+                  </div>
+                </div>
+                <div class="qc-score-badge" id="instructionalScoreBadge">88 / 100 PASS</div>
+              </div>
+
+              <!-- Outdated Warning Banner -->
+              <div class="outdated-banner hidden" id="instructionalOutdatedBanner">
+                ⚠️ This report is for a previous lesson version and is outdated.
+              </div>
+
+              <div class="qc-metrics-grid">
+                <div class="qcm-item">
+                  <span class="qcm-label">Alignment:</span>
+                  <span class="qcm-val" id="instMetricAlignment">--</span>
+                </div>
+                <div class="qcm-item">
+                  <span class="qcm-label">Clarity:</span>
+                  <span class="qcm-val" id="instMetricClarity">--</span>
+                </div>
+                <div class="qcm-item">
+                  <span class="qcm-label">45-Min Duration:</span>
+                  <span class="qcm-val text-success" id="instMetricDuration">100 / 100</span>
+                </div>
+              </div>
+
+              <div class="qc-issues-container" id="instructionalIssuesList">
+                <div class="placeholder-box">No instructional QC issues reported.</div>
               </div>
             </div>
           </div>
 
-          <!-- Tab 5: Agent ReAct Trace Logs -->
-          <div class="tab-content" id="tab-logs">
-            <div class="logs-header-bar">
-              <span>LangGraph Execution Trace (Reasoning &rarr; Actions &rarr; Observations)</span>
-              <button class="btn-text-only" id="copyLogsBtn">Copy Raw Log JSON</button>
+          <!-- Interactive Lesson Sections Editor -->
+          <div class="card editor-card">
+            <div class="card-header editor-header">
+              <div class="editor-title-group">
+                <h3>Lesson Sections Editor (45 Minutes Total)</h3>
+                <p class="card-subtitle">Instructors can edit any section, modify timings, and apply QC recommendations directly</p>
+              </div>
+              <div class="editor-tools">
+                <button type="button" class="btn btn-secondary btn-sm" id="btnPreviewInModal">👁️ Quick Preview</button>
+              </div>
             </div>
-            <div class="react-log-container" id="reactLogContainer">
-              <div class="placeholder-box">
-                <p>Execution trace will stream here when an agent workflow executes.</p>
+
+            <div class="sections-accordion" id="sectionsEditorAccordion">
+              <!-- Section 1: Introduction (5 min) -->
+              <div class="editor-section-block" data-section="introduction">
+                <div class="section-block-header">
+                  <span class="section-tag">SECTION 1</span>
+                  <h4>Introduction</h4>
+                  <div class="section-duration-control">
+                    <label>Duration:</label>
+                    <input type="number" id="secDur_intro" class="duration-input" value="5" min="1" max="45" /> min
+                  </div>
+                </div>
+                <div class="section-fields">
+                  <div class="form-group">
+                    <label>Overview:</label>
+                    <textarea id="edit_intro_overview" rows="2" class="form-textarea"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label>Why It Matters:</label>
+                    <textarea id="edit_intro_why" rows="2" class="form-textarea"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label>What You Will Learn (one per line):</label>
+                    <textarea id="edit_intro_learn" rows="3" class="form-textarea"></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 2: Core Concepts (12 min) -->
+              <div class="editor-section-block" data-section="coreConcepts">
+                <div class="section-block-header">
+                  <span class="section-tag">SECTION 2</span>
+                  <h4>Core Concepts & Explanations</h4>
+                  <div class="section-duration-control">
+                    <label>Duration:</label>
+                    <input type="number" id="secDur_concepts" class="duration-input" value="12" min="1" max="45" /> min
+                  </div>
+                </div>
+                <div class="section-fields" id="conceptsEditorList">
+                  <!-- Dynamically populated concepts -->
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm mt-2" id="btnAddConcept">+ Add Core Concept</button>
+              </div>
+
+              <!-- Section 3: Relevant Examples (8 min) -->
+              <div class="editor-section-block" data-section="examples">
+                <div class="section-block-header">
+                  <span class="section-tag">SECTION 3</span>
+                  <h4>Relevant Examples</h4>
+                  <div class="section-duration-control">
+                    <label>Duration:</label>
+                    <input type="number" id="secDur_examples" class="duration-input" value="8" min="1" max="45" /> min
+                  </div>
+                </div>
+                <div class="section-fields" id="examplesEditorList">
+                  <!-- Dynamically populated examples -->
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm mt-2" id="btnAddExample">+ Add Example</button>
+              </div>
+
+              <!-- Section 4: Practical Demonstration (8 min) -->
+              <div class="editor-section-block" data-section="practicalDemonstration">
+                <div class="section-block-header">
+                  <span class="section-tag">SECTION 4</span>
+                  <h4>Practical Demonstration</h4>
+                  <div class="section-duration-control">
+                    <label>Duration:</label>
+                    <input type="number" id="secDur_demo" class="duration-input" value="8" min="1" max="45" /> min
+                  </div>
+                </div>
+                <div class="section-fields">
+                  <div class="form-group">
+                    <label>Demonstration Description:</label>
+                    <textarea id="edit_demo_desc" rows="2" class="form-textarea"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label>Demonstration Steps (one step per line or step text):</label>
+                    <textarea id="edit_demo_steps" rows="4" class="form-textarea"></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 5: Hands-on Activity (7 min) -->
+              <div class="editor-section-block" data-section="handsOnActivity">
+                <div class="section-block-header">
+                  <span class="section-tag">SECTION 5</span>
+                  <h4>Hands-on Activity</h4>
+                  <div class="section-duration-control">
+                    <label>Duration:</label>
+                    <input type="number" id="secDur_activity" class="duration-input" value="7" min="1" max="45" /> min
+                  </div>
+                </div>
+                <div class="section-fields">
+                  <div class="form-group">
+                    <label>Activity Title:</label>
+                    <input type="text" id="edit_activity_title" class="form-input" />
+                  </div>
+                  <div class="form-group">
+                    <label>Instructions:</label>
+                    <textarea id="edit_activity_instructions" rows="3" class="form-textarea"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label>Materials & Tools (comma separated):</label>
+                    <input type="text" id="edit_activity_materials" class="form-input" />
+                  </div>
+                  <div class="form-group">
+                    <label>Expected Outcome:</label>
+                    <textarea id="edit_activity_outcome" rows="2" class="form-textarea"></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 6: Knowledge-Check Questions with Answers (3 min) -->
+              <div class="editor-section-block" data-section="knowledgeCheck">
+                <div class="section-block-header">
+                  <span class="section-tag">SECTION 6</span>
+                  <h4>Knowledge-Check Questions & Answers</h4>
+                  <div class="section-duration-control">
+                    <label>Duration:</label>
+                    <input type="number" id="secDur_qc" class="duration-input" value="3" min="1" max="45" /> min
+                  </div>
+                </div>
+                <div class="section-fields" id="questionsEditorList">
+                  <!-- Dynamically populated questions with options, answers, and explanations -->
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm mt-2" id="btnAddQuestion">+ Add Question</button>
+              </div>
+
+              <!-- Section 7: Summary & Key Takeaways (2 min) -->
+              <div class="editor-section-block" data-section="summary">
+                <div class="section-block-header">
+                  <span class="section-tag">SECTION 7</span>
+                  <h4>Summary & Next Steps</h4>
+                  <div class="section-duration-control">
+                    <label>Duration:</label>
+                    <input type="number" id="secDur_summary" class="duration-input" value="2" min="1" max="45" /> min
+                  </div>
+                </div>
+                <div class="section-fields">
+                  <div class="form-group">
+                    <label>Key Takeaways (one per line):</label>
+                    <textarea id="edit_summary_takeaways" rows="3" class="form-textarea"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label>Next Steps for Learners:</label>
+                    <textarea id="edit_summary_next" rows="2" class="form-textarea"></textarea>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer Save & Approval Action Bar -->
+            <div class="editor-footer-bar">
+              <div class="edit-summary-input-group">
+                <label for="editSummaryInput">Edit Summary / Change Log:</label>
+                <input type="text" id="editSummaryInput" class="form-input" placeholder="e.g. Refined core concept 1 and updated midpoint calculation." />
+              </div>
+              <div class="footer-buttons">
+                <button type="button" class="btn btn-primary" id="btnSaveVersionBottom">💾 Save as New Version (Never Overwrites)</button>
+                <button type="button" class="btn btn-success" id="btnApproveBottom">✅ Approve Final Lesson</button>
               </div>
             </div>
           </div>
         </div>
+
+        <!-- ================================================================= -->
+        <!-- VIEW 3: 45-MINUTE LESSON PREVIEW (Clean Pedagogical Document)     -->
+        <!-- ================================================================= -->
+        <div class="view-panel" id="view-preview">
+          <div class="card preview-card">
+            <div class="card-header preview-header">
+              <div>
+                <h2>45-Minute Lesson Preview & Presentation</h2>
+                <p class="card-subtitle">Classroom-ready pedagogical lesson plan with exact section timings</p>
+              </div>
+              <div class="preview-actions">
+                <button type="button" class="btn btn-secondary" id="btnPrintLesson">🖨️ Print Lesson</button>
+                <button type="button" class="btn btn-secondary" id="btnExportJson">⬇️ Download JSON</button>
+              </div>
+            </div>
+            <div class="lesson-preview-container" id="lessonPreviewContainer">
+              <!-- Rendered by app.js -->
+              <div class="placeholder-box">Select or generate a lesson to preview.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================================================================= -->
+        <!-- VIEW 4: RESEARCH & EVIDENCE EXPLORER (Stages 2 & 3)               -->
+        <!-- ================================================================= -->
+        <div class="view-panel" id="view-research">
+          <div class="card results-card" id="resultsCard">
+            <!-- Workspace Tabs Header -->
+            <div class="results-tabs-bar">
+              <button class="tab-btn active" data-tab="tab-evidence" id="tabBtnEvidence">
+                🎯 Extracted Evidence <span class="tab-count" id="countEvidence">0</span>
+              </button>
+              <button class="tab-btn" data-tab="tab-web" id="tabBtnWeb">
+                🌐 Web Sources <span class="tab-count" id="countWeb">0</span>
+              </button>
+              <button class="tab-btn" data-tab="tab-books" id="tabBtnBooks">
+                📚 Books <span class="tab-count" id="countBooks">0</span>
+              </button>
+              <button class="tab-btn" data-tab="tab-youtube" id="tabBtnYoutube">
+                📺 YouTube Videos <span class="tab-count" id="countYoutube">0</span>
+              </button>
+              <button class="tab-btn" data-tab="tab-logs" id="tabBtnLogs">
+                🤖 ReAct Trace Logs <span class="tab-count" id="countLogs">0</span>
+              </button>
+            </div>
+
+            <!-- Tab 1: Extracted Evidence -->
+            <div class="tab-content active" id="tab-evidence">
+              <div class="evidence-toolbar">
+                <div class="evidence-summary" id="evidenceSummaryText">
+                  Pedagogical evidence grounded across web, books, and lecture videos.
+                </div>
+              </div>
+              <div class="evidence-list" id="evidenceList">
+                <div class="placeholder-box">No research evidence gathered yet.</div>
+              </div>
+            </div>
+
+            <!-- Tab 2: Web Sources -->
+            <div class="tab-content" id="tab-web">
+              <div class="sources-grid" id="webSourcesGrid">
+                <div class="placeholder-box">No web sources collected yet.</div>
+              </div>
+            </div>
+
+            <!-- Tab 3: Books -->
+            <div class="tab-content" id="tab-books">
+              <div class="sources-grid" id="bookSourcesGrid">
+                <div class="placeholder-box">No book sources collected yet.</div>
+              </div>
+            </div>
+
+            <!-- Tab 4: YouTube Videos -->
+            <div class="tab-content" id="tab-youtube">
+              <div class="sources-grid" id="youtubeSourcesGrid">
+                <div class="placeholder-box">No video sources collected yet.</div>
+              </div>
+            </div>
+
+            <!-- Tab 5: Agent ReAct Trace Logs -->
+            <div class="tab-content" id="tab-logs">
+              <div class="logs-header-bar">
+                <span>LangGraph Multi-Agent Execution Trace</span>
+                <button class="btn-text-only" id="copyLogsBtn">Copy Raw Log JSON</button>
+              </div>
+              <div class="react-log-container" id="reactLogContainer">
+                <div class="placeholder-box">Trace logs will appear when an agent workflow executes.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </section>
     </main>
 
+    <!-- Modal: Approval Confirmation -->
+    <div class="modal-backdrop hidden" id="approvalModal" role="dialog" aria-modal="true" aria-labelledby="approvalModalTitle">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3 id="approvalModalTitle">✅ Formal Instructor Approval</h3>
+          <button class="modal-close-btn" id="closeApprovalModalBtn" type="button" aria-label="Close modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p>You are granting formal instructional approval for this lesson version. Approved lessons are marked certified and locked for classroom presentation.</p>
+          <div class="form-group mt-3">
+            <label for="instructorNameInput">Instructor Name:</label>
+            <input type="text" id="instructorNameInput" class="form-input" value="Lead Instructor" />
+          </div>
+          <div class="form-group mt-3">
+            <label for="instructorApprovalNotes">Approval Notes / Pedagogical Endorsement:</label>
+            <textarea id="instructorApprovalNotes" rows="3" class="form-textarea">Lesson verified compliant with 45-minute duration, factual accuracy, and instructional objectives.</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="cancelApprovalBtn">Cancel</button>
+          <button type="button" class="btn btn-success" id="confirmApprovalBtn">Grant Final Approval</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Footer -->
     <footer class="app-footer">
-      <p>AI Lesson Creation Tool &bull; Stage 2 & 3 Complete &bull; LangGraph.js Multi-Agent System with Groq LLM Gateway &bull; <a href="/api/health" target="_blank">Health Check</a> &bull; <a href="/api/agent/gateway/stats" target="_blank">Gateway Stats</a></p>
+      <p>AI Lesson Creation Tool &bull; Complete 6-Stage AI Orchestration &bull; Input Guardrails (openai/gpt-oss-20b) &bull; LangGraph.js Multi-Agent &bull; Instructor Dashboard</p>
     </footer>
   </div>
 

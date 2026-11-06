@@ -401,6 +401,12 @@ async function saveLessonNode(state) {
       sections:          validatedLesson.sections || {},
       youtubeVideos:     validatedLesson.youtubeVideos || [],
       references:        validatedLesson.references || [],
+      version:           1,
+      versionTag:        'v1.0 (AI Generated)',
+      isLatestVersion:   true,
+      isApproved:        false,
+      editedBy:          'ai',
+      editSummary:       'Initial AI lesson generation',
       status:            isValid ? 'completed' : 'completed', // save regardless, flag errors
       isValid,
       validationErrors,

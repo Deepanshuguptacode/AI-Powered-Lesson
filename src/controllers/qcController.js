@@ -119,8 +119,55 @@ async function getQcReportsByLessonController(req, res, next) {
   }
 }
 
+// ── POST /api/qc/rerun/:lessonId ──────────────────────────────────────────────
+
+async function rerunQcForLesson(req, res, next) {
+  try {
+    const { lessonId } = req.params;
+    const lesson = await findGeneratedLessonById(lessonId);
+    if (!lesson) {
+      return res.status(404).json({ success: false, message: 'Lesson not found' });
+    }
+
+    console.log(`[QcController] Re-running QC for lesson version: ${lesson._id} (${lesson.versionTag || 'v1'})`);
+
+    const result = await runQcGraphs({
+      generatedLessonId: lesson._id.toString(),
+      lessonId: lesson.lessonId || null,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: `QC re-audit completed for ${lesson.versionTag || 'current version'}`,
+      data: {
+        generatedLessonId: lesson._id,
+        durationMs: result.durationMs,
+        factual: {
+          reportId:      result.factual.savedReportId,
+          status:        result.factual.status,
+          overallScore:  result.factual.scores?.overall,
+          issueCount:    result.factual.issues?.length || 0,
+          summary:       result.factual.summary,
+          recommendation:result.factual.recommendation,
+        },
+        instructional: {
+          reportId:      result.instructional.savedReportId,
+          status:        result.instructional.status,
+          overallScore:  result.instructional.scores?.overall,
+          issueCount:    result.instructional.issues?.length || 0,
+          summary:       result.instructional.summary,
+          recommendation:result.instructional.recommendation,
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   runQc,
+  rerunQcForLesson,
   listQcReportsController,
   getQcReportController,
   getQcReportsByLessonController,

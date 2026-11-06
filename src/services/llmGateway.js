@@ -272,8 +272,35 @@ async function hallucinateResponse(messages, opts = {}) {
   const lastMsg = messages[messages.length - 1];
   const text = typeof lastMsg?.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg?.content || '');
 
+  // Guardrail check with openai/gpt-oss-20b
+  if (opts.model === 'openai/gpt-oss-20b' || text.includes('Guardrail') || text.includes('guardrail') || text.includes('PROMPT INJECTION')) {
+    const isInjection = /ignore (all )?(previous|above|prior)|bypass|jailbreak|disregard|system prompt/i.test(text);
+    const isHarmful = /bomb|malware|hack|attack|illegal|exploit/i.test(text);
+    const isPassed = !isInjection && !isHarmful;
+
+    return JSON.stringify({
+      passed: isPassed,
+      riskLevel: isInjection || isHarmful ? 'high' : 'safe',
+      scores: {
+        safety: isHarmful ? 10 : 96,
+        educationalRelevance: isPassed ? 92 : 20,
+        promptInjectionRisk: isInjection ? 95 : 4,
+        clarity: isPassed ? 88 : 35
+      },
+      violations: isPassed ? [] : [{
+        category: isInjection ? 'prompt_injection' : 'harmful_content',
+        severity: 'high',
+        description: isInjection ? 'Detected prompt injection pattern.' : 'Content violates safety guidelines.',
+        detectedText: isInjection ? 'Prompt injection keyword' : 'Harmful material keyword'
+      }],
+      reasoning: isPassed ? 'Input verified as safe, educational, and free from prompt injections.' : 'Input violates safety or prompt injection policies.',
+      suggestedRemediation: isPassed ? '' : 'Please rephrase with an appropriate academic topic without override commands.',
+      modelUsed: 'openai/gpt-oss-20b'
+    });
+  }
+
   // If asking for search queries
-  if (text.includes('search queries') || text.includes('queries') || text.includes('Lesson Title:')) {
+  if (text.includes('search queries') || text.includes('queries')) {
     return JSON.stringify({
       reasoning: 'Synthesized search strategy covering theoretical concepts, textbook foundations, and visual lecture media.',
       queries: {
@@ -302,8 +329,8 @@ async function hallucinateResponse(messages, opts = {}) {
   // If asking for a lesson (45-minute structure)
   if (text.includes('45-minute lesson') || text.includes('totalDurationMinutes') || text.includes('SECTION DURATIONS')) {
     // Extract title and objective from the prompt
-    const titleMatch = text.match(/Title:\s*([^\n]+)/);
-    const objectiveMatch = text.match(/Learning Objective:\s*([^\n]+)/);
+    const titleMatch = text.match(/(?:[-*]\s*)?Title:\s*([^\n\r]+)/i) || text.match(/Lesson Title:\s*([^\n\r]+)/i);
+    const objectiveMatch = text.match(/(?:[-*]\s*)?Learning Objective:\s*([^\n\r]+)/i);
     const title = titleMatch ? titleMatch[1].trim() : 'Lesson Topic';
     const objective = objectiveMatch ? objectiveMatch[1].trim() : 'Understand the core concepts';
 

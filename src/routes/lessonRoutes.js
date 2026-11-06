@@ -8,10 +8,11 @@ const {
 } = require('../controllers/lessonController');
 
 const { validateLesson } = require('../middlewares/validateLesson');
+const { inputGuardrailMiddleware } = require('../middlewares/guardrailMiddleware');
 
 // Lesson Routes
 router.route('/')
-  .post(validateLesson, createLesson)
+  .post(validateLesson, inputGuardrailMiddleware, createLesson)
   .get(getLessons);
 
 router.route('/:id')

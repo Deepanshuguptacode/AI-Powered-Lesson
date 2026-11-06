@@ -281,6 +281,8 @@ async function instructionalSaveReportNode(state) {
     const reportDoc = {
       generatedLessonId,
       lessonId:          lessonId || lesson?.lessonId || null,
+      lessonVersion:     lesson?.version || 1,
+      isOutdated:        false,
       agentType:         'instructional',
       status:            status || 'failed',
       scores:            scores || {},

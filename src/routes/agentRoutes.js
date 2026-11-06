@@ -9,9 +9,10 @@ const {
   getExecution,
   getGatewayStats,
 } = require('../controllers/agentController');
+const { inputGuardrailMiddleware } = require('../middlewares/guardrailMiddleware');
 
 // POST  /api/agent/research             – run multi-agent research graph
-router.post('/research', startAgentResearch);
+router.post('/research', inputGuardrailMiddleware, startAgentResearch);
 
 // GET   /api/agent/executions           – list all agent executions
 router.get('/executions', listExecutions);

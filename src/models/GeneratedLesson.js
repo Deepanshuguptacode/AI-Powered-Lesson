@@ -107,6 +107,22 @@ const referenceSchema = new mongoose.Schema({
   description: { type: String, default: '' },
 }, { _id: false });
 
+// ── QC Decision sub-document ──────────────────────────────────────────────────
+
+const qcDecisionSchema = new mongoose.Schema(
+  {
+    reportId:               { type: mongoose.Schema.Types.ObjectId, ref: 'QcReport' },
+    issueNumber:            { type: Number },
+    action:                 { type: String, enum: ['accepted', 'rejected', 'modified'], default: 'accepted' },
+    originalRecommendation: { type: String, default: '' },
+    modifiedRecommendation: { type: String, default: '' },
+    affectedSection:        { type: String, default: '' },
+    notes:                  { type: String, default: '' },
+    appliedAt:              { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 // ── Main schema ───────────────────────────────────────────────────────────────
 
 const generatedLessonSchema = new mongoose.Schema(
@@ -127,6 +143,68 @@ const generatedLessonSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Versioning Hierarchy (Preserves all history; never overwrites)
+    version: {
+      type: Number,
+      default: 1,
+      index: true,
+    },
+    rootLessonId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'GeneratedLesson',
+      default: null,
+      index: true,
+    },
+    parentLessonId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'GeneratedLesson',
+      default: null,
+      index: true,
+    },
+    versionTag: {
+      type: String,
+      default: 'v1.0 (AI Generated)',
+    },
+    isLatestVersion: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    editedBy: {
+      type: String,
+      enum: ['ai', 'instructor'],
+      default: 'ai',
+    },
+    editSummary: {
+      type: String,
+      default: 'Initial AI lesson generation',
+    },
+
+    // Approval Gate (Mandatory Instructor Approval)
+    isApproved: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    approvedAt: {
+      type: Date,
+      default: null,
+    },
+    approvedBy: {
+      type: String,
+      default: null,
+    },
+    instructorNotes: {
+      type: String,
+      default: '',
+    },
+
+    // Instructor decisions on QC recommendations
+    qcDecisions: {
+      type: [qcDecisionSchema],
+      default: [],
+    },
+
     // Core lesson metadata
     title:             { type: String, required: true, trim: true },
     learningObjective: { type: String, required: true, trim: true },
@@ -142,7 +220,7 @@ const generatedLessonSchema = new mongoose.Schema(
     // Generation metadata
     status: {
       type: String,
-      enum: ['generating', 'completed', 'failed', 'pending_qc'],
+      enum: ['generating', 'completed', 'failed', 'pending_qc', 'under_review', 'approved'],
       default: 'generating',
     },
 
@@ -170,8 +248,8 @@ const generatedLessonSchema = new mongoose.Schema(
 
 generatedLessonSchema.index({ createdAt: -1 });
 generatedLessonSchema.index({ lessonId: 1, createdAt: -1 });
-generatedLessonSchema.index({ researchSessionId: 1 });
 generatedLessonSchema.index({ status: 1 });
+generatedLessonSchema.index({ rootLessonId: 1, version: 1 });
 
 const GeneratedLesson = mongoose.model('GeneratedLesson', generatedLessonSchema);
 module.exports = GeneratedLesson;

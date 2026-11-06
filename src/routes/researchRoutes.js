@@ -9,9 +9,10 @@ const {
   getResearchSession,
   getResearchSources,
 } = require('../controllers/researchController');
+const { inputGuardrailMiddleware } = require('../middlewares/guardrailMiddleware');
 
 // POST   /api/research           – start a research run
-router.post('/', startResearch);
+router.post('/', inputGuardrailMiddleware, startResearch);
 
 // GET    /api/research           – list all research sessions
 router.get('/', listResearchSessions);

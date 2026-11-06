@@ -333,6 +333,134 @@ async function updateGeneratedLesson(id, updateData) {
   return updated;
 }
 
+// ── Lesson Versioning & Instructor Editing (Never overwrites) ──────────────
+
+async function saveGeneratedLessonVersion(previousLessonId, updateData, editMetadata = {}) {
+  const previous = await findGeneratedLessonById(previousLessonId);
+  if (!previous) {
+    throw new Error(`Previous lesson not found: ${previousLessonId}`);
+  }
+
+  const rootId = previous.rootLessonId || previous._id;
+  const newVersionNumber = (previous.version || 1) + 1;
+  const newVersionTag = `v${newVersionNumber}.0 (${editMetadata.editedBy === 'instructor' ? 'Instructor Edit' : 'AI Iteration'})`;
+
+  // 1. Mark previous version as not latest
+  await updateGeneratedLesson(previous._id, { isLatestVersion: false });
+
+  // 2. Mark previous QC reports as outdated
+  await markQcReportsOutdated(previous._id, `Lesson edited to version ${newVersionTag}`);
+
+  // 3. Assemble new version payload (inherits unmodified sections, preserves previous intact)
+  const newLessonData = {
+    lessonId:          previous.lessonId,
+    researchSessionId: previous.researchSessionId,
+    title:             updateData.title || previous.title,
+    learningObjective: updateData.learningObjective || previous.learningObjective,
+    totalDurationMinutes: updateData.totalDurationMinutes || previous.totalDurationMinutes || 45,
+    sections:          updateData.sections || previous.sections,
+    youtubeVideos:     updateData.youtubeVideos || previous.youtubeVideos || [],
+    references:        updateData.references || previous.references || [],
+    version:           newVersionNumber,
+    rootLessonId:      rootId,
+    parentLessonId:    previous._id,
+    versionTag:        newVersionTag,
+    isLatestVersion:   true,
+    editedBy:          editMetadata.editedBy || 'instructor',
+    editSummary:       editMetadata.editSummary || `Instructor edited sections at ${new Date().toLocaleTimeString()}`,
+    isApproved:        false, // requires fresh approval
+    status:            'under_review',
+    isValid:           true,
+    validationErrors:  [],
+    generationStats:   previous.generationStats,
+    qcDecisions:       updateData.qcDecisions || previous.qcDecisions || [],
+    qcReportIds:       [], // New version starts with fresh/unattached QC reports until audited
+  };
+
+  return await saveGeneratedLesson(newLessonData);
+}
+
+async function findLessonVersions(lessonId) {
+  const target = await findGeneratedLessonById(lessonId);
+  if (!target) return [];
+
+  const rootId = target.rootLessonId || target._id;
+
+  if (isDbConnected()) {
+    try {
+      const versions = await GeneratedLesson.find({
+        $or: [
+          { rootLessonId: rootId },
+          { _id: rootId }
+        ]
+      }).sort({ version: -1 }).lean();
+      if (versions && versions.length > 0) return versions;
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB findLessonVersions failed:', err.message);
+    }
+  }
+
+  // In-memory fallback
+  return Array.from(memStore.generatedLessons.values())
+    .filter(l => {
+      const lRoot = l.rootLessonId?.toString() || l._id?.toString();
+      const targetRoot = rootId.toString();
+      return lRoot === targetRoot || l._id?.toString() === targetRoot;
+    })
+    .sort((a, b) => (b.version || 1) - (a.version || 1));
+}
+
+async function approveGeneratedLesson(lessonId, instructorName = 'Instructor', notes = '') {
+  return await updateGeneratedLesson(lessonId, {
+    isApproved: true,
+    status: 'approved',
+    approvedAt: new Date(),
+    approvedBy: instructorName,
+    instructorNotes: notes,
+  });
+}
+
+async function markQcReportsOutdated(generatedLessonId, reason = 'Lesson updated') {
+  if (isDbConnected()) {
+    try {
+      await QcReport.updateMany(
+        { generatedLessonId },
+        {
+          $set: {
+            isOutdated: true,
+            outdatedReason: reason,
+            outdatedAt: new Date()
+          }
+        }
+      );
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB markQcReportsOutdated failed:', err.message);
+    }
+  }
+
+  // In-memory fallback
+  for (const report of memStore.qcReports.values()) {
+    if (report.generatedLessonId?.toString() === generatedLessonId?.toString()) {
+      report.isOutdated = true;
+      report.outdatedReason = reason;
+      report.outdatedAt = new Date();
+    }
+  }
+}
+
+async function addQcDecision(generatedLessonId, decision) {
+  const lesson = await findGeneratedLessonById(generatedLessonId);
+  if (!lesson) throw new Error('Lesson not found');
+
+  const decisions = lesson.qcDecisions || [];
+  decisions.push({
+    ...decision,
+    appliedAt: new Date()
+  });
+
+  return await updateGeneratedLesson(generatedLessonId, { qcDecisions: decisions });
+}
+
 // ── QC Reports ────────────────────────────────────────────────────────────────
 
 async function saveQcReport(data) {
@@ -404,11 +532,16 @@ module.exports = {
   updateExecution,
   findExecutionById,
   listExecutions,
-  // Generated Lessons
+  // Generated Lessons & Versioning
   saveGeneratedLesson,
   findGeneratedLessonById,
   listGeneratedLessons,
   updateGeneratedLesson,
+  saveGeneratedLessonVersion,
+  findLessonVersions,
+  approveGeneratedLesson,
+  markQcReportsOutdated,
+  addQcDecision,
   // QC Reports
   saveQcReport,
   findQcReportById,
