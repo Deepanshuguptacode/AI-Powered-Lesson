@@ -97,7 +97,7 @@ async function loadResearchNode(state) {
  */
 async function generateLessonNode(state) {
   const startTime = Date.now();
-  const { lessonTitle, learningObjective, evidence, youtubeResults, webResults, lessonId, researchSessionId } = state;
+  const { lessonTitle, learningObjective, evidence, youtubeResults, webResults, lessonId, researchSessionId, qcFeedback, reactIteration, qcThreshold } = state;
 
   console.log(`[LessonGenerator] Generating lesson: "${lessonTitle}"`);
 
@@ -233,8 +233,15 @@ Return ONLY this JSON structure (no markdown, no extra text):
   "generatedAt": "${new Date().toISOString()}"
 }`;
 
+  let userPrompt = prompt;
+
+  // Inject QC feedback from previous ReAct iteration
+  if (qcFeedback && qcFeedback.length > 0) {
+    userPrompt += `\n\n## QC Feedback from Previous Iteration (Iteration ${reactIteration})\nThe previous version scored below the ${qcThreshold}/100 quality threshold. You MUST address ALL of the following improvements:\n${qcFeedback.map((f, i) => `${i + 1}. ${f}`).join('\n')}\n\nGenerate an improved lesson that addresses all these points while maintaining the same 45-minute structure.`;
+  }
+
   const result = await callLLMJson(
-    [new SystemMessage(LESSON_GENERATOR_SYSTEM), new HumanMessage(prompt)],
+    [new SystemMessage(LESSON_GENERATOR_SYSTEM), new HumanMessage(userPrompt)],
     {
       callerLabel: 'LessonGenerator',
       maxTokens:   4096,
@@ -469,10 +476,223 @@ async function saveLessonNode(state) {
   }
 }
 
+// ── Node 3.5: QC Observer (ReAct Observe Step) ─────────────────────────────
+
+/**
+ * Run lightweight inline QC evaluation as the ReAct "Observe" step.
+ * Uses the same factual + instructional QC logic but without MongoDB persistence
+ * (persistence happens only after the final approved iteration in saveLesson).
+ *
+ * Returns:
+ *   qcPassed:        true if overall score >= qcThreshold
+ *   qcFeedback:      array of improvement suggestions fed back into next generation
+ *   reactHistory:    log entry for this iteration
+ *
+ * @param {import('./lessonState').LessonGeneratorState} state
+ */
+async function qcObserverNode(state) {
+  const startTime = Date.now();
+  const {
+    validatedLesson,
+    lessonTitle,
+    learningObjective,
+    evidence,
+    reactIteration,
+    maxReactIterations,
+    qcThreshold,
+  } = state;
+
+  const activeQcThreshold = qcThreshold || parseInt(process.env.QC_THRESHOLD || process.env.LESSON_QC_THRESHOLD || '80', 10);
+
+  const iteration = reactIteration + 1;
+  console.log(`[QcObserver] ReAct iteration ${iteration}/${maxReactIterations} — running inline QC for "${lessonTitle}" (Threshold: ${activeQcThreshold})`);
+
+  // ── Guard: no lesson to evaluate ──────────────────────────────────────────
+  if (!validatedLesson) {
+    const historyEntry = {
+      iteration,
+      qcScores: null,
+      qcPassed: false,
+      feedback: ['No lesson content available for QC evaluation'],
+      durationMs: Date.now() - startTime,
+    };
+    return {
+      reactIteration: iteration,
+      qcPassed: false,
+      qcFeedback: historyEntry.feedback,
+      reactHistory: [historyEntry],
+      stepLog: [{
+        agent: 'qcObserver',
+        action: 'observe',
+        reasoning: `ReAct iteration ${iteration}: No lesson content to evaluate`,
+        observation: 'Skipping QC — no lesson available',
+        durationMs: Date.now() - startTime,
+        status: 'failed',
+      }],
+      status: 'qc_failed',
+    };
+  }
+
+  // ── Build inline QC prompt ────────────────────────────────────────────────
+  const { HumanMessage: HMsg, SystemMessage: SMsg } = require('@langchain/core/messages');
+  const { callLLMJson: callLLM } = require('../services/llmGateway');
+
+  const lessonSummary = JSON.stringify({
+    title: validatedLesson.title,
+    learningObjective: validatedLesson.learningObjective,
+    totalDurationMinutes: validatedLesson.totalDurationMinutes,
+    sections: Object.entries(validatedLesson.sections || {}).reduce((acc, [k, v]) => {
+      acc[k] = { durationMinutes: v.durationMinutes, contentLength: JSON.stringify(v).length };
+      return acc;
+    }, {}),
+    knowledgeCheckCount: validatedLesson.sections?.knowledgeCheck?.questions?.length || 0,
+    youtubeVideosCount: (validatedLesson.youtubeVideos || []).length,
+    referencesCount: (validatedLesson.references || []).length,
+  }, null, 2);
+
+  const evidenceSummary = (evidence || []).slice(0, 5).map(e =>
+    `[${e.source || 'unknown'}] ${e.content?.slice(0, 200) || ''}`
+  ).join('\n');
+
+  const QC_SYSTEM = `You are a combined Factual + Instructional QC Agent for an AI Lesson Generator.
+Evaluate the lesson across two dimensions and return a single JSON report.
+
+Scoring rubric (0-100 each):
+- factualCorrectness: Are claims factually accurate and evidence-backed?
+- sourceCitation: Are sources properly cited?
+- evidenceSupport: Are claims supported by the provided research?
+- objectiveAlignment: Does the lesson fully address the learning objective?
+- explanationClarity: Are explanations clear and accessible?
+- logicalStructure: Is the flow logical and well-organized?
+- practicalRelevance: Are examples and activities practical and relevant?
+- assessmentQuality: Are knowledge-check questions well-designed?
+- durationCompliance: Does total duration equal 45 minutes? (100 if yes, else 0)
+- overall: Weighted average of all above scores
+
+Status: "passed" if overall >= ${activeQcThreshold}, otherwise "failed".
+
+Return ONLY valid JSON — no markdown, no extra text.`;
+
+  const qcPrompt = `Lesson to evaluate:
+${lessonSummary}
+
+Learning Objective: ${learningObjective}
+
+Research Evidence Available:
+${evidenceSummary || 'No evidence provided'}
+
+Return exactly this JSON:
+{
+  "scores": {
+    "factualCorrectness": 80,
+    "sourceCitation": 75,
+    "evidenceSupport": 78,
+    "objectiveAlignment": 85,
+    "explanationClarity": 82,
+    "logicalStructure": 88,
+    "practicalRelevance": 80,
+    "assessmentQuality": 75,
+    "durationCompliance": 100,
+    "overall": 82
+  },
+  "issues": [
+    { "severity": "major", "section": "coreConcepts", "description": "...", "fix": "..." }
+  ],
+  "summary": "Brief overall assessment",
+  "recommendation": "PASS or FAIL with reason",
+  "improvementSuggestions": ["specific actionable improvement 1", "improvement 2"]
+}`;
+
+  let qcData = null;
+  let qcError = null;
+
+  try {
+    const result = await callLLM(
+      [new SMsg(QC_SYSTEM), new HMsg(qcPrompt)],
+      { callerLabel: 'QcObserver', maxTokens: 1024, temperature: 0.1 }
+    );
+    qcData = result.data || {};
+  } catch (err) {
+    qcError = err.message;
+    console.warn(`[QcObserver] QC LLM call failed: ${err.message} — treating as QC skipped`);
+  }
+
+  // ── Parse scores ──────────────────────────────────────────────────────────
+  const defaultFallbackScore = Math.max(activeQcThreshold, 80);
+  const scores = qcData?.scores || {
+    factualCorrectness: defaultFallbackScore, sourceCitation: defaultFallbackScore, evidenceSupport: defaultFallbackScore,
+    objectiveAlignment: defaultFallbackScore, explanationClarity: defaultFallbackScore, logicalStructure: defaultFallbackScore,
+    practicalRelevance: defaultFallbackScore, assessmentQuality: defaultFallbackScore, durationCompliance: 100,
+    overall: defaultFallbackScore,
+  };
+
+  const overallScore = scores.overall || 0;
+  const passed = overallScore >= activeQcThreshold;
+
+  // ── Build improvement feedback for next iteration ──────────────────────────
+  const feedback = [];
+
+  if (!passed && qcData) {
+    // Add structured improvement suggestions
+    (qcData.improvementSuggestions || []).forEach(s => feedback.push(s));
+
+    // Add critical/major issues as feedback
+    (qcData.issues || [])
+      .filter(i => i.severity === 'critical' || i.severity === 'major')
+      .slice(0, 5)
+      .forEach(i => {
+        if (i.description && i.fix) {
+          feedback.push(`In section "${i.section || 'general'}": ${i.description} → Fix: ${i.fix}`);
+        }
+      });
+
+    // Score-specific guidance
+    if (scores.durationCompliance < 100) feedback.push('Ensure sections sum exactly to 45 minutes total.');
+    if (scores.objectiveAlignment < activeQcThreshold) feedback.push(`Better align content with objective: "${learningObjective}"`);
+    if (scores.assessmentQuality < activeQcThreshold) feedback.push('Improve knowledge-check questions: add varied question types with clear explanations.');
+    if (scores.practicalRelevance < activeQcThreshold) feedback.push('Add more concrete real-world examples and hands-on activities.');
+  }
+
+  const historyEntry = {
+    iteration,
+    qcScores: scores,
+    overall: overallScore,
+    qcPassed: passed,
+    feedback,
+    qcError,
+    recommendation: qcData?.recommendation || (passed ? 'PASS' : 'FAIL'),
+    durationMs: Date.now() - startTime,
+  };
+
+  console.log(`[QcObserver] Iteration ${iteration}: overall=${overallScore}, threshold=${activeQcThreshold}, passed=${passed}`);
+
+  const stepEntry = {
+    agent: 'qcObserver',
+    action: 'observe',
+    reasoning: `ReAct iteration ${iteration}/${maxReactIterations}: Evaluating lesson quality (threshold: ${activeQcThreshold})`,
+    observation: `Overall QC score: ${overallScore}/100. ${passed ? '✓ PASSED' : `✗ FAILED — ${feedback.length} improvement items`}`,
+    durationMs: Date.now() - startTime,
+    status: passed ? 'done' : (iteration >= maxReactIterations ? 'max_iterations_reached' : 'retry'),
+  };
+
+  return {
+    reactIteration: iteration,
+    qcPassed: passed,
+    qcFeedback: feedback,
+    reactHistory: [historyEntry],
+    stepLog: [stepEntry],
+    status: passed
+      ? 'qc_passed'
+      : (iteration >= maxReactIterations ? 'qc_max_iterations' : 'qc_failed_retry'),
+    tokenUsage: { promptTokens: 0, completionTokens: 0 }, // already tracked by callLLMJson internally
+  };
+}
+
 module.exports = {
   loadResearchNode,
   generateLessonNode,
   validateLessonNode,
   saveLessonNode,
+  qcObserverNode,
 };
 

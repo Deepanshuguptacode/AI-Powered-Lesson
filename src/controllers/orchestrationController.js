@@ -24,11 +24,25 @@ async function startOrchestration(req, res, next) {
   try {
     const { title, learningObjective, async = false, force = false } = req.body;
 
-    if (!title || !learningObjective) {
+    const titleClean = (title || '').trim();
+    const objectiveClean = (learningObjective || '').trim();
+
+    if (!titleClean || !objectiveClean) {
       return res.status(400).json({
         success: false,
-        message: 'title and learningObjective are required',
+        message: 'title and learningObjective are required and cannot be empty',
+        errors: [
+          ...(!titleClean ? ['title is required'] : []),
+          ...(!objectiveClean ? ['learningObjective is required'] : []),
+        ],
       });
+    }
+
+    if (titleClean.length < 3) {
+      return res.status(400).json({ success: false, message: 'title must be at least 3 characters' });
+    }
+    if (objectiveClean.length < 10) {
+      return res.status(400).json({ success: false, message: 'learningObjective must be at least 10 characters' });
     }
 
     if (async) {
@@ -41,14 +55,14 @@ async function startOrchestration(req, res, next) {
         streamUrl: `/api/orchestration/stream/${runId}`,
       });
 
-      executeFullOrchestration({ title, learningObjective, runId, force }).catch((err) => {
+      executeFullOrchestration({ title: titleClean, learningObjective: objectiveClean, runId, force }).catch((err) => {
         console.error(`[Orchestration] Background run error: ${err.message}`);
       });
       return;
     }
 
     // Synchronous execution (awaits completion and returns full run)
-    const result = await executeFullOrchestration({ title, learningObjective, force });
+    const result = await executeFullOrchestration({ title: titleClean, learningObjective: objectiveClean, force });
 
     return res.status(result.status === 'completed' ? 200 : 422).json({
       success: result.status === 'completed',

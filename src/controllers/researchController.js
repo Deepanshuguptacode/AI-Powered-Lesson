@@ -4,7 +4,8 @@ const { runResearch } = require('../research/researchOrchestrator');
 const {
   listSessions,
   findSessionById,
-  findSourcesBySession
+  findSourcesBySession,
+  findExecutionById,
 } = require('../services/safeDb');
 
 // ── POST /api/research ────────────────────────────────────────────────────────
@@ -56,6 +57,33 @@ async function listResearchSessions(req, res, next) {
   }
 }
 
+// ── GET /api/research/latest ───────────────────────────────────────────────
+
+async function getLatestResearchSession(req, res, next) {
+  try {
+    const sessions = await listSessions(1);
+    if (!sessions || sessions.length === 0) {
+      return res.status(404).json({ success: false, message: 'No research sessions found' });
+    }
+    const session = sessions[0];
+    const sources = await findSourcesBySession(session._id);
+    let execution = null;
+    if (session.agentRunId) {
+      execution = await findExecutionById(session.agentRunId);
+    }
+    return res.json({
+      success: true,
+      data: {
+        ...session,
+        sources: sources || [],
+        execution: execution || null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ── GET /api/research/:id ─────────────────────────────────────────────────────
 
 async function getResearchSession(req, res, next) {
@@ -64,7 +92,19 @@ async function getResearchSession(req, res, next) {
     if (!session) {
       return res.status(404).json({ success: false, message: 'Research session not found' });
     }
-    return res.json({ success: true, data: session });
+    const sources = await findSourcesBySession(req.params.id);
+    let execution = null;
+    if (session.agentRunId) {
+      execution = await findExecutionById(session.agentRunId);
+    }
+    return res.json({
+      success: true,
+      data: {
+        ...session,
+        sources: sources || [],
+        execution: execution || null,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -82,4 +122,10 @@ async function getResearchSources(req, res, next) {
   }
 }
 
-module.exports = { startResearch, listResearchSessions, getResearchSession, getResearchSources };
+module.exports = {
+  startResearch,
+  listResearchSessions,
+  getLatestResearchSession,
+  getResearchSession,
+  getResearchSources,
+};

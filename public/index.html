@@ -342,6 +342,33 @@
                 <div class="connector-arrow">▶</div>
               </div>
 
+              <!-- Stage 4b: QC Feedback Loop (LangGraph Conditional Edges) -->
+              <div class="arch-stage-column" data-stage="stage_4b" id="col_stage_4b">
+                <div class="arch-stage-header">
+                  <span class="stage-num">STAGE 4b</span>
+                  <h4>QC Feedback Loop</h4>
+                  <span class="stage-model-badge">LangGraph Edges</span>
+                </div>
+                <div class="arch-node" id="node_qc_loop">
+                  <div class="node-icon">🔄</div>
+                  <div class="node-body">
+                    <h5 id="label_qc_loop">QC Loop</h5>
+                    <p>Conditional Regenerate</p>
+                    <span class="node-state-pill" id="state_qc_loop">Waiting</span>
+                  </div>
+                </div>
+                <!-- Back-arrow indicator: QC → Lesson Generator -->
+                <div class="qc-loop-back-arrow hidden" id="qcLoopBackArrow">
+                  <span class="loop-arrow-label" id="qcLoopArrowLabel">↩ Regenerating...</span>
+                </div>
+              </div>
+
+              <!-- Animated Connector 4b→5 -->
+              <div class="arch-connector" id="conn_4b_5">
+                <div class="connector-line"></div>
+                <div class="connector-arrow">▶</div>
+              </div>
+
               <!-- Stage 5: Independent Parallel QC Auditors -->
               <div class="arch-stage-column" data-stage="stage_5">
                 <div class="arch-stage-header">
@@ -455,6 +482,21 @@
               <div class="dm-breakdown" id="dmBreakdown">
                 Intro: 5m &bull; Concepts: 12m &bull; Examples: 8m &bull; Demo: 8m &bull; Activity: 7m &bull; QC: 3m &bull; Summary: 2m
               </div>
+            </div>
+          </div>
+
+          <!-- QC Improvement Loop Banner (shown when score < 80) -->
+          <div class="card mb-3 hidden" id="qcLoopNoticeBar" style="background: #fffbeb; border: 1px solid #fde68a; padding: 14px 18px; border-radius: 8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+              <div>
+                <strong style="color: #92400e; font-size: 0.95rem;">⚠️ QC Score below quality threshold (80%)</strong>
+                <p style="color: #78350f; font-size: 0.85rem; margin: 4px 0 0;" id="qcLoopNoticeText">
+                  This lesson version does not meet the 80% quality threshold. Run the feedback loop to regenerate and address all QC suggestions.
+                </p>
+              </div>
+              <button type="button" class="btn btn-warning" id="btnAutoImproveQcLoop">
+                🔄 Run QC Feedback Loop (Regenerate with Suggestions)
+              </button>
             </div>
           </div>
 

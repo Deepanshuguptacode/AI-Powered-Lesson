@@ -18,6 +18,13 @@ const errorHandler = (err, req, res, next) => {
   let message = err.message || 'Internal Server Error';
   let errors = null;
 
+  // Handle lesson graph input validation errors
+  if (err.code === 'INVALID_INPUT') {
+    statusCode = 400;
+    message = err.message;
+    errors = err.validationErrors || null;
+  }
+
   // Handle Mongoose CastError (invalid ObjectId format)
   if (err.name === 'CastError' && err.kind === 'ObjectId') {
     statusCode = 400;

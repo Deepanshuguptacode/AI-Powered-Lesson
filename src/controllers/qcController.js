@@ -11,6 +11,7 @@
  */
 
 const { runQcGraphs } = require('../agents/qcGraph');
+const { runFullLessonQcGraph } = require('../agents/lessonQcLoopGraph');
 const {
   listQcReports,
   findQcReportById,
@@ -165,9 +166,93 @@ async function rerunQcForLesson(req, res, next) {
   }
 }
 
+// ── POST /api/qc/loop-improve/:lessonId ────────────────────────────────────────
+
+/**
+ * Regenerate a lesson version by following the suggestions given by QC reports,
+ * then immediately re-audit the new version to verify quality threshold.
+ */
+async function loopImproveLessonWithQc(req, res, next) {
+  try {
+    const { lessonId } = req.params;
+    const lesson = await findGeneratedLessonById(lessonId);
+    if (!lesson) {
+      return res.status(404).json({ success: false, message: 'Lesson not found' });
+    }
+
+    const QC_THRESHOLD = parseInt(process.env.QC_THRESHOLD || process.env.LESSON_QC_THRESHOLD || '80', 10);
+    const existingReports = await findQcReportsByLesson(lessonId);
+
+    // Extract suggestions from factual & instructional reports
+    const qcFeedback = [];
+    existingReports.forEach((report) => {
+      const typeLabel = report.agentType === 'factual' ? 'Factual QC' : 'Instructional QC';
+      if (report.recommendation) {
+        qcFeedback.push(`[${typeLabel} Recommendation] ${report.recommendation}`);
+      }
+      if (report.summary) {
+        qcFeedback.push(`[${typeLabel} Summary] ${report.summary}`);
+      }
+      (report.issues || []).forEach((issue) => {
+        const fix = issue.suggestedImprovement || issue.fix || '';
+        qcFeedback.push(`[${typeLabel} Issue in "${issue.affectedSection || 'content'}"] ${issue.description || ''}${fix ? ` → Fix: ${fix}` : ''}`);
+      });
+    });
+
+    if (qcFeedback.length === 0) {
+      qcFeedback.push(`Ensure full pedagogical alignment with objective: "${lesson.learningObjective}". Elevate overall quality above ${QC_THRESHOLD}/100.`);
+    }
+
+    console.log(`[QcController] Running LangGraph iterative QC feedback loop with ${qcFeedback.length} suggestions from QC reports`);
+
+    const loopResult = await runFullLessonQcGraph({
+      lessonTitle:       lesson.title,
+      learningObjective: lesson.learningObjective,
+      researchSessionId: lesson.researchSessionId ? lesson.researchSessionId.toString() : null,
+      lessonId:          lesson.lessonId ? lesson.lessonId.toString() : null,
+      qcThreshold:       QC_THRESHOLD,
+      maxQcLoops:        parseInt(process.env.MAX_QC_LOOPS || '3', 10),
+      initialQcFeedback: qcFeedback,
+    });
+
+    if (!loopResult.savedLessonId) {
+      throw new Error('Lesson generation did not return a saved lesson ID');
+    }
+
+    const lastPass = loopResult.qcLoopHistory && loopResult.qcLoopHistory.length > 0
+      ? loopResult.qcLoopHistory[loopResult.qcLoopHistory.length - 1]
+      : null;
+
+    const factScore = lastPass?.factScore ?? loopResult.qcReports?.factual?.scores?.overall ?? 0;
+    const instScore = lastPass?.instScore ?? loopResult.qcReports?.instructional?.scores?.overall ?? 0;
+    const passedThreshold = loopResult.qcLoopPassed;
+
+    return res.status(201).json({
+      success: true,
+      message: `Lesson improved and re-audited via LangGraph iterative QC loop! (Threshold: ${QC_THRESHOLD}%)`,
+      data: {
+        newLessonId:        loopResult.savedLessonId,
+        qcPassed:           passedThreshold,
+        qcThreshold:        QC_THRESHOLD,
+        factualScore:       factScore,
+        instructionalScore: instScore,
+        qcLoopPass:         loopResult.qcLoopPass,
+        lesson:             loopResult.lesson,
+        qcReports: {
+          factual:       loopResult.qcReports?.factual || null,
+          instructional: loopResult.qcReports?.instructional || null,
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   runQc,
   rerunQcForLesson,
+  loopImproveLessonWithQc,
   listQcReportsController,
   getQcReportController,
   getQcReportsByLessonController,

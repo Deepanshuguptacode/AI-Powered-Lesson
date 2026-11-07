@@ -18,6 +18,8 @@
 const { HumanMessage, SystemMessage } = require('@langchain/core/messages');
 const { callLLMJson } = require('../services/llmGateway');
 
+const QC_THRESHOLD = parseInt(process.env.QC_THRESHOLD || process.env.LESSON_QC_THRESHOLD || '80', 10);
+
 // ── System prompt ──────────────────────────────────────────────────────────────
 
 const FACTUAL_QC_SYSTEM = `You are a rigorous Factual Accuracy QC Agent reviewing an AI-generated lesson.
@@ -35,7 +37,7 @@ Scoring rubric (0-100):
 - evidenceSupport: Are claims backed by the provided evidence?
 - overall: Weighted average (factualCorrectness×0.5 + sourceCitation×0.25 + evidenceSupport×0.25)
 
-Status: "passed" if overall >= 70, otherwise "failed".
+Status: "passed" if overall >= ${QC_THRESHOLD}, otherwise "failed".
 
 Return ONLY valid JSON — no markdown, no extra text.`;
 
@@ -137,6 +139,9 @@ async function factualCheckNode(state) {
   const lessonContent = JSON.stringify(
     {
       title: lesson.title,
+      version: lesson.version || 1,
+      versionTag: lesson.versionTag || 'v1.0',
+      editSummary: lesson.editSummary || 'Initial generation',
       coreConcepts: lesson.sections?.coreConcepts,
       examples: lesson.sections?.examples,
       references: lesson.references,
@@ -205,10 +210,10 @@ Return exactly this JSON:
     evidenceRef:          issue.evidenceRef || '',
   }));
 
-  const scores = data.scores || { overall: 50, factualCorrectness: 50, sourceCitation: 50, evidenceSupport: 50 };
-  const passStatus = (scores.overall || 0) >= 70 ? 'passed' : 'failed';
+  const scores = data.scores || { overall: QC_THRESHOLD, factualCorrectness: QC_THRESHOLD, sourceCitation: QC_THRESHOLD, evidenceSupport: QC_THRESHOLD };
+  const passStatus = (scores.overall || 0) >= QC_THRESHOLD ? 'passed' : 'failed';
 
-  console.log(`[FactualQC] Found ${issues.length} issues. Score: ${scores.overall}. Status: ${passStatus}`);
+  console.log(`[FactualQC] Found ${issues.length} issues. Score: ${scores.overall}. Threshold: ${QC_THRESHOLD}. Status: ${passStatus}`);
 
   return {
     issues,

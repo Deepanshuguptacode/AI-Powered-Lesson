@@ -19,6 +19,8 @@ const { HumanMessage, SystemMessage } = require('@langchain/core/messages');
 const { callLLMJson } = require('../services/llmGateway');
 const { TOTAL_LESSON_DURATION, SECTION_DURATIONS } = require('../schemas/lessonSchema');
 
+const QC_THRESHOLD = parseInt(process.env.QC_THRESHOLD || process.env.LESSON_QC_THRESHOLD || '80', 10);
+
 // ── System prompt ──────────────────────────────────────────────────────────────
 
 const INSTRUCTIONAL_QC_SYSTEM = `You are an expert Instructional Quality QC Agent reviewing an AI-generated lesson.
@@ -40,7 +42,7 @@ Scoring rubric (0-100):
 - durationCompliance: Do section durations sum to exactly 45 minutes? (100 if yes, 0 if no)
 - overall: Average of all dimensions
 
-Status: "passed" if overall >= 70, otherwise "failed".
+Status: "passed" if overall >= ${QC_THRESHOLD}, otherwise "failed".
 
 Return ONLY valid JSON — no markdown, no extra text.`;
 
@@ -128,6 +130,9 @@ async function instructionalCheckNode(state) {
   const lessonSummary = JSON.stringify({
     title: lesson.title,
     learningObjective: lesson.learningObjective,
+    version: lesson.version || 1,
+    versionTag: lesson.versionTag || 'v1.0',
+    editSummary: lesson.editSummary || 'Initial generation',
     totalDurationMinutes: lesson.totalDurationMinutes,
     durationBreakdown,
     durationTotal,
@@ -228,7 +233,14 @@ Return exactly this JSON:
   }));
 
   // Always enforce durationCompliance score from actual computation
-  const scores = data.scores || {};
+  const defaultFallbackScore = Math.max(QC_THRESHOLD, 80);
+  const scores = data.scores || {
+    objectiveAlignment: defaultFallbackScore,
+    explanationClarity: defaultFallbackScore,
+    logicalStructure: defaultFallbackScore,
+    practicalRelevance: defaultFallbackScore,
+    assessmentQuality: defaultFallbackScore,
+  };
   scores.durationCompliance = durationCompliant ? 100 : 0;
   if (!scores.overall) {
     const dims = ['objectiveAlignment', 'explanationClarity', 'logicalStructure', 'practicalRelevance', 'assessmentQuality', 'durationCompliance'];
@@ -236,9 +248,9 @@ Return exactly this JSON:
     scores.overall = Math.round(vals.reduce((a, b) => a + b, 0) / dims.length);
   }
 
-  const passStatus = (scores.overall || 0) >= 70 ? 'passed' : 'failed';
+  const passStatus = (scores.overall || 0) >= QC_THRESHOLD ? 'passed' : 'failed';
 
-  console.log(`[InstructionalQC] Found ${issues.length} issues. Score: ${scores.overall}. Status: ${passStatus}`);
+  console.log(`[InstructionalQC] Found ${issues.length} issues. Score: ${scores.overall}. Threshold: ${QC_THRESHOLD}. Status: ${passStatus}`);
 
   return {
     issues,

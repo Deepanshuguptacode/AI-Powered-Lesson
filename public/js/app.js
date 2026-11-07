@@ -11,6 +11,7 @@ const state = {
   activeView: 'view-orchestrator',
   currentLesson: null,         // Currently loaded GeneratedLesson doc
   lessonVersions: [],          // Array of all versions for current lesson root
+  currentResearchSessionId: null, // Currently loaded ResearchSession id
   currentQcReports: {
     factual: null,
     instructional: null,
@@ -191,7 +192,22 @@ const el = {
   bookSourcesGrid: document.getElementById('bookSourcesGrid'),
   youtubeSourcesGrid: document.getElementById('youtubeSourcesGrid'),
   reactLogContainer: document.getElementById('reactLogContainer'),
+  evidenceSummaryText: document.getElementById('evidenceSummaryText'),
   copyLogsBtn: document.getElementById('copyLogsBtn'),
+
+  // QC Improvement Loop Notice
+  qcLoopNoticeBar: document.getElementById('qcLoopNoticeBar'),
+  qcLoopNoticeText: document.getElementById('qcLoopNoticeText'),
+  btnAutoImproveQcLoop: document.getElementById('btnAutoImproveQcLoop'),
+
+  // QC Feedback Loop Architecture Node (Stage 4b)
+  node_qc_loop:        document.getElementById('node_qc_loop'),
+  state_qc_loop:       document.getElementById('state_qc_loop'),
+  label_qc_loop:       document.getElementById('label_qc_loop'),
+  qcLoopBackArrow:     document.getElementById('qcLoopBackArrow'),
+  qcLoopArrowLabel:    document.getElementById('qcLoopArrowLabel'),
+  conn_4b_5:           document.getElementById('conn_4b_5'),
+  col_stage_4b:        document.getElementById('col_stage_4b'),
 
   // Approval Modal
   approvalModal: document.getElementById('approvalModal'),
@@ -257,6 +273,9 @@ function initEventListeners() {
   el.approveLessonBtn.addEventListener('click', () => openApprovalModal());
   el.btnApproveBottom.addEventListener('click', () => openApprovalModal());
   el.rerunQcBtn.addEventListener('click', handleRerunQc);
+  if (el.btnAutoImproveQcLoop) {
+    el.btnAutoImproveQcLoop.addEventListener('click', handleAutoImproveQcLoop);
+  }
 
   // Dynamic Add Items in Editor
   el.btnAddConcept.addEventListener('click', () => addConceptRow());
@@ -328,6 +347,16 @@ function switchView(viewId) {
   if (viewId === 'view-preview' && state.currentLesson) {
     renderLessonPreview(state.currentLesson);
   }
+
+  if (viewId === 'view-research') {
+    if (state.currentLesson?.researchSessionId) {
+      loadResearchData(state.currentLesson.researchSessionId);
+    } else if (state.currentResearchSessionId) {
+      loadResearchData(state.currentResearchSessionId);
+    } else {
+      loadLatestResearch();
+    }
+  }
 }
 
 function switchResearchTab(tabId) {
@@ -350,6 +379,7 @@ function resetArchitectureNodes() {
     { el: el.node_youtube_agent, state: el.state_youtube },
     { el: el.node_lesson_generator, state: el.state_generator },
     { el: el.node_validator, state: el.state_validator },
+    { el: el.node_qc_loop, state: el.state_qc_loop },
     { el: el.node_qc_factual, state: el.state_qc_factual },
     { el: el.node_qc_instructional, state: el.state_qc_instructional },
     { el: el.node_instructor_gate, state: el.state_instructor },
@@ -360,8 +390,11 @@ function resetArchitectureNodes() {
     if (state) state.textContent = 'Idle';
   });
 
-  const connectors = [el.conn_1_2, el.conn_2_3, el.conn_3_4, el.conn_4_5, el.conn_5_6];
-  connectors.forEach((c) => c && c.classList.remove('active'));
+  const connectors = [el.conn_1_2, el.conn_2_3, el.conn_3_4, el.conn_4_5, el.conn_4b_5, el.conn_5_6];
+  connectors.forEach((c) => c && c.classList.remove('active', 'looping'));
+
+  clearQcLoopBackArrow();
+  if (el.label_qc_loop) el.label_qc_loop.textContent = 'QC Loop';
 
   el.liveStageLabel.textContent = 'System Ready • Idle';
   el.tickerStageBadge.textContent = 'STAGE 0: IDLE';
@@ -372,26 +405,63 @@ function resetArchitectureNodes() {
 
 function setStageNodeState(nodeKey, status, statusText) {
   const map = {
-    guardrails: { el: el.node_guardrails, st: el.state_guardrails, conn: el.conn_1_2 },
-    supervisor: { el: el.node_supervisor, st: el.state_supervisor, conn: el.conn_2_3 },
-    web: { el: el.node_web_agent, st: el.state_web },
-    book: { el: el.node_book_agent, st: el.state_book },
-    youtube: { el: el.node_youtube_agent, st: el.state_youtube },
-    generator: { el: el.node_lesson_generator, st: el.state_generator, conn: el.conn_4_5 },
-    validator: { el: el.node_validator, st: el.state_validator },
-    qc_factual: { el: el.node_qc_factual, st: el.state_qc_factual },
-    qc_instructional: { el: el.node_qc_instructional, st: el.state_qc_instructional, conn: el.conn_5_6 },
-    instructor: { el: el.node_instructor_gate, st: el.state_instructor },
+    guardrails:       { el: el.node_guardrails,       st: el.state_guardrails,       conn: el.conn_1_2 },
+    supervisor:       { el: el.node_supervisor,        st: el.state_supervisor,       conn: el.conn_2_3 },
+    web:              { el: el.node_web_agent,         st: el.state_web },
+    book:             { el: el.node_book_agent,        st: el.state_book },
+    youtube:          { el: el.node_youtube_agent,     st: el.state_youtube },
+    generator:        { el: el.node_lesson_generator,  st: el.state_generator,        conn: el.conn_4_5 },
+    validator:        { el: el.node_validator,         st: el.state_validator },
+    qc_loop:          { el: el.node_qc_loop,           st: el.state_qc_loop,          conn: el.conn_4b_5 },
+    qc_factual:       { el: el.node_qc_factual,        st: el.state_qc_factual },
+    qc_instructional: { el: el.node_qc_instructional,  st: el.state_qc_instructional, conn: el.conn_5_6 },
+    instructor:       { el: el.node_instructor_gate,   st: el.state_instructor },
   };
 
   const item = map[nodeKey];
   if (!item) return;
 
   const baseClass = item.el.classList.contains('arch-subnode') ? 'arch-subnode' : 'arch-node';
-  item.el.className = `${baseClass} ${status}`;
+
+  // Special handling for qc_loop looping state
+  if (nodeKey === 'qc_loop' && status === 'looping') {
+    item.el.className = `${baseClass} active looping`;
+  } else {
+    item.el.className = `${baseClass} ${status}`;
+  }
+
   if (item.st) item.st.textContent = statusText || status.toUpperCase();
   if (item.conn) {
-    if (status === 'active' || status === 'completed') item.conn.classList.add('active');
+    if (status === 'active' || status === 'completed' || status === 'looping') {
+      item.conn.classList.add('active');
+    }
+    if (status === 'looping' && nodeKey === 'qc_loop') {
+      // Activate conn_4_5 (back to generator) with looping style
+      if (el.conn_4_5) el.conn_4_5.classList.add('looping');
+    }
+  }
+}
+
+function setQcLoopNodeLooping(loopPass, maxLoops, suggestionsCount) {
+  setStageNodeState('qc_loop', 'looping', `Pass ${loopPass}/${maxLoops}`);
+  if (el.label_qc_loop) {
+    el.label_qc_loop.textContent = `QC Loop (${loopPass}/${maxLoops})`;
+  }
+  if (el.qcLoopBackArrow) {
+    el.qcLoopBackArrow.classList.remove('hidden');
+    if (el.qcLoopArrowLabel) {
+      el.qcLoopArrowLabel.textContent = `↩ Regenerating (${suggestionsCount} suggestions)`;
+    }
+  }
+  if (el.conn_4_5) el.conn_4_5.classList.add('looping');
+}
+
+function clearQcLoopBackArrow() {
+  if (el.qcLoopBackArrow) {
+    el.qcLoopBackArrow.classList.add('hidden');
+  }
+  if (el.conn_4_5) {
+    el.conn_4_5.classList.remove('looping');
   }
 }
 
@@ -428,6 +498,274 @@ function addTelemetryLog(badge, message) {
   el.telemetryLogBox.scrollTop = el.telemetryLogBox.scrollHeight;
 }
 
+// ── Real-Time Live Architecture Tracker Engine ──────────────────────────────
+
+let livePollingTimer = null;
+
+function connectOrchestrationStream(runId) {
+  if (state.sseSource) {
+    state.sseSource.close();
+    state.sseSource = null;
+  }
+  if (livePollingTimer) {
+    clearInterval(livePollingTimer);
+    livePollingTimer = null;
+  }
+
+  state.lastLoggedCount = 0;
+  const sseUrl = `/api/orchestration/stream/${encodeURIComponent(runId)}`;
+
+  try {
+    const es = new EventSource(sseUrl);
+    state.sseSource = es;
+    let isTerminated = false;
+
+    es.onmessage = (event) => {
+      try {
+        if (!event.data) return;
+        const run = JSON.parse(event.data);
+        handleLiveOrchestrationUpdate(run);
+
+        if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+          isTerminated = true;
+          es.close();
+          state.sseSource = null;
+          handleOrchestrationFinished(run);
+        }
+      } catch (err) {
+        console.warn('[Live Tracker SSE] Parse error:', err);
+      }
+    };
+
+    es.addEventListener('done', () => {
+      isTerminated = true;
+      es.close();
+      state.sseSource = null;
+    });
+
+    es.onerror = (err) => {
+      console.warn('[Live Tracker SSE] Stream connection closed/interrupted, switching to polling fallback');
+      es.close();
+      state.sseSource = null;
+      if (!isTerminated) {
+        startLivePollingFallback(runId);
+      }
+    };
+  } catch (err) {
+    console.warn('[Live Tracker SSE] Failed to instantiate EventSource, using polling fallback:', err);
+    startLivePollingFallback(runId);
+  }
+}
+
+function startLivePollingFallback(runId) {
+  if (livePollingTimer) clearInterval(livePollingTimer);
+
+  livePollingTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/orchestration/status/${encodeURIComponent(runId)}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!json.success || !json.data) return;
+
+      const run = json.data;
+      handleLiveOrchestrationUpdate(run);
+
+      if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+        clearInterval(livePollingTimer);
+        livePollingTimer = null;
+        handleOrchestrationFinished(run);
+      }
+    } catch (e) {
+      console.warn('[Live Tracker Polling] Polling error:', e);
+    }
+  }, 400);
+}
+
+function handleLiveOrchestrationUpdate(run) {
+  if (!run) return;
+  state.currentRunId = run.runId;
+
+  // 1. Sync any new telemetry logs from backend
+  if (Array.isArray(run.logs)) {
+    const newLogs = run.logs.slice(state.lastLoggedCount || 0);
+    newLogs.forEach((log) => {
+      let badge = 'RUNNING';
+      if (log.stage === 'qc_loop' || log.node === 'node_qc_loop' || (log.message && log.message.includes('QC Loop'))) {
+        badge = 'QC LOOP';
+      } else if (log.status === 'completed' || log.status === 'passed') {
+        badge = 'SUCCESS';
+      } else if (log.status === 'failed') {
+        badge = 'FAILED';
+      }
+      addTelemetryLog(badge, log.message || `${log.stage}: ${log.status}`);
+    });
+    state.lastLoggedCount = run.logs.length;
+  }
+
+  // 2. Stage 1: Input Guardrails
+  const s1 = run.stages?.input_guardrails;
+  if (s1) {
+    if (s1.status === 'running') {
+      setStageNodeState('guardrails', 'active', 'Scanning');
+      el.liveStageLabel.textContent = '⚡ Stage 1 Active: Input Guardrails (openai/gpt-oss-20b)';
+      el.tickerStageBadge.textContent = 'STAGE 1: GUARDRAILS';
+      el.tickerStageBadge.className = 'ticker-badge';
+      el.tickerMessage.textContent = 'Scanning input with openai/gpt-oss-20b for prompt injection, safety, and academic scope...';
+    } else if (s1.status === 'completed') {
+      setStageNodeState('guardrails', 'completed', 'Passed');
+      updateGuardrailDisplay(s1.data || run.artifacts?.guardrailResult || { passed: true, scores: { safety: 96, promptInjectionRisk: 4, educationalRelevance: 92 } });
+    } else if (s1.status === 'failed') {
+      setStageNodeState('guardrails', 'failed', 'Rejected');
+    }
+  }
+
+  // 3. Stage 2: Supervisor Planning
+  const s2 = run.stages?.supervisor_plan;
+  if (s2) {
+    if (s2.status === 'running') {
+      setStageNodeState('guardrails', 'completed', 'Passed');
+      setStageNodeState('supervisor', 'active', 'Planning');
+      el.liveStageLabel.textContent = '⚡ Stage 2 Active: Supervisor Planning (LangGraph.js)';
+      el.tickerStageBadge.textContent = 'STAGE 2: SUPERVISOR';
+      el.tickerStageBadge.className = 'ticker-badge';
+      el.tickerMessage.textContent = 'Supervisor Agent planning research queries across Web, Book, and YouTube...';
+    } else if (s2.status === 'completed') {
+      setStageNodeState('supervisor', 'completed', 'Planned');
+    }
+  }
+
+  // 4. Stage 3: Research Swarm
+  const s3 = run.stages?.parallel_research;
+  if (s3) {
+    if (s3.status === 'running') {
+      setStageNodeState('supervisor', 'completed', 'Planned');
+      setStageNodeState('web', 'active', 'Searching');
+      setStageNodeState('book', 'active', 'Scanning');
+      setStageNodeState('youtube', 'active', 'Indexing');
+      el.liveStageLabel.textContent = '⚡ Stage 3 Active: Multi-Agent Research Swarm (Parallel)';
+      el.tickerStageBadge.textContent = 'STAGE 3: RESEARCH';
+      el.tickerStageBadge.className = 'ticker-badge';
+      el.tickerMessage.textContent = 'Web, Book, and YouTube Agents querying online encyclopedias, textbooks, and video transcripts in parallel...';
+    } else if (s3.status === 'completed') {
+      setStageNodeState('web', 'completed', 'Gathered');
+      setStageNodeState('book', 'completed', 'Gathered');
+      setStageNodeState('youtube', 'completed', 'Gathered');
+      if (run.artifacts?.researchSessionId && !state.currentResearchSessionId) {
+        state.currentResearchSessionId = run.artifacts.researchSessionId;
+        loadResearchData(run.artifacts.researchSessionId);
+      }
+    }
+  }
+
+  // 5. Stage 4 / 4b: Lesson Synthesizer & QC Feedback Loop
+  const s4 = run.stages?.lesson_generator;
+  const s4b = run.stages?.qc_loop;
+
+  if (s4b && s4b.status === 'running') {
+    // QC Feedback Loop is actively executing or looping back
+    const loopData = s4b.data || {};
+    const loopPass = loopData.qcLoopPass || 1;
+    const maxLoops = loopData.maxQcLoops || 3;
+    const suggCount = loopData.suggestionsCount || 0;
+    const factScore = loopData.factualScore !== undefined ? loopData.factualScore : '--';
+    const instScore = loopData.instructionalScore !== undefined ? loopData.instructionalScore : '--';
+
+    setQcLoopNodeLooping(loopPass, maxLoops, suggCount);
+    setStageNodeState('generator', 'active', `Regenerating v${loopPass + 1}.0`);
+    setStageNodeState('validator', 'active', 'Re-verifying');
+
+    el.liveStageLabel.textContent = `🔄 Stage 4b Active: QC Loop (Pass ${loopPass}/${maxLoops} Below 80% — Regenerating)`;
+    el.tickerStageBadge.textContent = `QC LOOP ${loopPass}/${maxLoops}: REGENERATING`;
+    el.tickerStageBadge.className = 'ticker-badge bg-warning';
+    el.tickerMessage.textContent = `QC score (Factual: ${factScore}%, Instructional: ${instScore}%) below 80%. Regenerating with ${suggCount} QC suggestions...`;
+  } else if (s4 && s4.status === 'running') {
+    setStageNodeState('generator', 'active', 'Synthesizing');
+    setStageNodeState('validator', 'active', 'Verifying');
+    el.liveStageLabel.textContent = '⚡ Stage 4 Active: Lesson Synthesizer & Validator (openai/gpt-oss-120b)';
+    el.tickerStageBadge.textContent = 'STAGE 4: SYNTHESIS';
+    el.tickerStageBadge.className = 'ticker-badge';
+    el.tickerMessage.textContent = 'Synthesizing 7 structured sections and validating strict 45-minute total duration...';
+  } else if (s4 && s4.status === 'completed' && (!s4b || s4b.status !== 'running')) {
+    setStageNodeState('generator', 'completed', 'Synthesized');
+    setStageNodeState('validator', 'completed', '45m Valid');
+  }
+
+  // 6. Stage 5: Parallel QC Agents
+  const s5 = run.stages?.parallel_qc;
+  if (s5) {
+    if (s5.status === 'running') {
+      const qcPass = s5.data?.qcLoopPass || 1;
+      const maxLoops = s5.data?.maxQcLoops || 3;
+      setStageNodeState('generator', 'completed', 'Synthesized');
+      setStageNodeState('validator', 'completed', '45m Valid');
+      setStageNodeState('qc_loop', 'active', `Pass ${qcPass}/${maxLoops} Audit`);
+      setStageNodeState('qc_factual', 'active', 'Auditing Facts');
+      setStageNodeState('qc_instructional', 'active', 'Auditing Pedagogy');
+      el.liveStageLabel.textContent = `⚡ Stage 5 Active: Parallel QC Audit Agents (Pass ${qcPass}/${maxLoops})`;
+      el.tickerStageBadge.textContent = `STAGE 5: QC AUDIT (PASS ${qcPass})`;
+      el.tickerStageBadge.className = 'ticker-badge';
+      el.tickerMessage.textContent = `Running Factual QC Agent & Instructional QC Agent concurrently (Quality Threshold: ≥ 80%)...`;
+    } else if (s5.status === 'completed') {
+      const qcData = s5.data || {};
+      const factScore = qcData.factualScore ?? run.artifacts?.qcReports?.factual?.scores?.overall ?? 85;
+      const instScore = qcData.instructionalScore ?? run.artifacts?.qcReports?.instructional?.scores?.overall ?? 88;
+      const qcPassed = qcData.qcPassed ?? (factScore >= 80 && instScore >= 80);
+      const totalPasses = qcData.qcLoopPass || 1;
+
+      clearQcLoopBackArrow();
+      setStageNodeState('qc_loop', 'completed', qcPassed ? `Passed (${totalPasses}p)` : `${totalPasses} Pass(es)`);
+      setStageNodeState('qc_factual', 'completed', `${factScore}% Score`);
+      setStageNodeState('qc_instructional', 'completed', `${instScore}% Score`);
+
+      el.tickerStageBadge.textContent = qcPassed ? 'QC PASSED (≥80%)' : 'QC COMPLETED';
+      el.tickerStageBadge.className = qcPassed ? 'ticker-badge bg-success' : 'ticker-badge';
+      el.tickerMessage.textContent = qcPassed
+        ? `Parallel QC audit PASSED quality threshold (≥80%)! Factual: ${factScore}%, Instructional: ${instScore}%.`
+        : `Parallel QC complete after ${totalPasses} passes. Factual: ${factScore}%, Instructional: ${instScore}%.`;
+    }
+  }
+
+  // 7. Stage 6: Instructor Review Gate
+  const s6 = run.stages?.instructor_review;
+  if (s6 && s6.status === 'completed') {
+    setStageNodeState('instructor', 'active', 'Review Ready');
+    el.liveStageLabel.textContent = '✅ Stage 6 Ready: Instructor Dashboard (Human-in-the-Loop)';
+    el.tickerStageBadge.textContent = 'STAGE 6: INSTRUCTOR REVIEW';
+    el.tickerStageBadge.className = 'ticker-badge bg-success';
+    el.tickerMessage.textContent = 'All AI pipelines complete! Lesson and independent QC reports delivered to Instructor Dashboard.';
+  }
+}
+
+async function handleOrchestrationFinished(run) {
+  stopOrchestrationTimer();
+  el.startFullOrchBtn.disabled = false;
+  el.orchSpinner.classList.add('hidden');
+  el.orchBtnText.textContent = 'Run Live AI Orchestration (End-to-End)';
+
+  if (run.status === 'completed') {
+    showAlert('Complete AI Orchestration pipeline executed successfully! QC verified and delivered to Instructor Dashboard.', 'success');
+
+    if (run.artifacts?.researchSessionId) {
+      state.currentResearchSessionId = run.artifacts.researchSessionId;
+      loadResearchData(run.artifacts.researchSessionId);
+    }
+
+    if (run.artifacts?.generatedLessonId) {
+      await loadLessonById(run.artifacts.generatedLessonId);
+      await fetchSavedLessons();
+      setTimeout(() => switchView('view-dashboard'), 800);
+    }
+  } else if (run.status === 'failed') {
+    const errMsg = run.error || 'Pipeline aborted with errors.';
+    showAlert(`Orchestration failed: ${errMsg}`, 'error');
+    addTelemetryLog('FAILED', `Fatal error: ${errMsg}`);
+    if (el.orchRecoveryBar) {
+      el.orchRecoveryBar.classList.remove('hidden');
+      el.recoveryMessage.textContent = `Pipeline issue: ${errMsg}. Previous versions & research evidence preserved intact.`;
+    }
+  }
+}
+
 // ── Run Complete Live AI Orchestration ───────────────────────────────────────
 async function handleStartFullOrchestration() {
   const title = el.titleInput.value.trim();
@@ -458,7 +796,7 @@ async function handleStartFullOrchestration() {
     const response = await fetch('/api/orchestration/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, learningObjective }),
+      body: JSON.stringify({ title, learningObjective, async: true, force: true }),
     });
 
     const result = await response.json();
@@ -476,6 +814,10 @@ async function handleStartFullOrchestration() {
         el.orchRecoveryBar.classList.remove('hidden');
         el.recoveryMessage.textContent = errMsg;
       }
+      el.startFullOrchBtn.disabled = false;
+      el.orchSpinner.classList.add('hidden');
+      el.orchBtnText.textContent = 'Run Live AI Orchestration (End-to-End)';
+      stopOrchestrationTimer();
       return;
     }
 
@@ -488,87 +830,22 @@ async function handleStartFullOrchestration() {
       addTelemetryLog('FAILED', `Guardrail Rejection: ${errMsg}`);
       showAlert(errMsg, 'error');
       updateGuardrailDisplay(result.guardrail || { passed: false, reasoning: errMsg });
+      el.startFullOrchBtn.disabled = false;
+      el.orchSpinner.classList.add('hidden');
+      el.orchBtnText.textContent = 'Run Live AI Orchestration (End-to-End)';
+      stopOrchestrationTimer();
       return;
     }
 
-    const runData = result.data;
-    state.currentRunId = runData.runId;
+    const runId = result.runId || (result.data && result.data.runId);
+    state.currentRunId = runId;
     if (el.orchRecoveryBar) el.orchRecoveryBar.classList.add('hidden');
 
-    // Stage 1 complete
-    setStageNodeState('guardrails', 'completed', 'Passed');
-    updateGuardrailDisplay(runData.stages?.input_guardrails?.data || { passed: true, scores: { safety: 96, promptInjectionRisk: 4, educationalRelevance: 92 } });
-    addTelemetryLog('SUCCESS', 'Stage 1 Guardrail PASSED: High safety score, zero prompt injection risk.');
-
-    // Stage 2: Supervisor ReAct Planning
-    el.liveStageLabel.textContent = '⚡ Stage 2 Active: Supervisor Planning (LangGraph.js)';
-    el.tickerStageBadge.textContent = 'STAGE 2: SUPERVISOR';
-    el.tickerMessage.textContent = 'Supervisor Agent planning research queries across Web, Book, and YouTube...';
-    setStageNodeState('supervisor', 'active', 'Planning');
-    addTelemetryLog('RUNNING', 'Stage 2: Supervisor formulating targeted research queries.');
-
-    await sleep(400);
-    setStageNodeState('supervisor', 'completed', 'Planned');
-
-    // Stage 3: Multi-Agent Parallel Research
-    el.liveStageLabel.textContent = '⚡ Stage 3 Active: Multi-Agent Research Swarm (Parallel)';
-    el.tickerStageBadge.textContent = 'STAGE 3: RESEARCH';
-    el.tickerMessage.textContent = 'Web, Book, and YouTube Agents querying online encyclopedias, textbooks, and video transcripts...';
-    setStageNodeState('web', 'active', 'Searching');
-    setStageNodeState('book', 'active', 'Scanning');
-    setStageNodeState('youtube', 'active', 'Indexing');
-    addTelemetryLog('RUNNING', 'Stage 3: Multi-Agent Swarm running concurrently.');
-
-    await sleep(400);
-    setStageNodeState('web', 'completed', 'Gathered');
-    setStageNodeState('book', 'completed', 'Gathered');
-    setStageNodeState('youtube', 'completed', 'Gathered');
-    addTelemetryLog('SUCCESS', 'Stage 3: Parallel research complete. Evidence curated.');
-
-    // Stage 4: 45-Minute Lesson Synthesizer & Strict Duration Validator
-    el.liveStageLabel.textContent = '⚡ Stage 4 Active: Lesson Synthesizer & Validator (openai/gpt-oss-120b)';
-    el.tickerStageBadge.textContent = 'STAGE 4: SYNTHESIS';
-    el.tickerMessage.textContent = 'Synthesizing 7 structured sections and validating strict 45-minute total duration...';
-    setStageNodeState('generator', 'active', 'Synthesizing');
-    setStageNodeState('validator', 'active', 'Verifying');
-    addTelemetryLog('RUNNING', 'Stage 4: Synthesizing 45-min lesson grounded in research evidence.');
-
-    await sleep(400);
-    setStageNodeState('generator', 'completed', 'Synthesized');
-    setStageNodeState('validator', 'completed', '45m Valid');
-    addTelemetryLog('SUCCESS', 'Stage 4: 45-Minute Lesson generated & validated (5+12+8+8+7+3+2 = 45m).');
-
-    // Stage 5: Independent Parallel QC Auditors
-    el.liveStageLabel.textContent = '⚡ Stage 5 Active: Parallel QC Audit Agents (LangGraph.js)';
-    el.tickerStageBadge.textContent = 'STAGE 5: QC AUDIT';
-    el.tickerMessage.textContent = 'Running Factual QC Agent & Instructional QC Agent concurrently via Promise.allSettled()...';
-    setStageNodeState('qc_factual', 'active', 'Auditing Facts');
-    setStageNodeState('qc_instructional', 'active', 'Auditing Pedagogy');
-    addTelemetryLog('RUNNING', 'Stage 5: Parallel QC agents running factual and instructional quality audits.');
-
-    await sleep(400);
-    const factScore = runData.artifacts?.qcReports?.factual?.scores?.overall ?? 85;
-    const instScore = runData.artifacts?.qcReports?.instructional?.scores?.overall ?? 88;
-    setStageNodeState('qc_factual', 'completed', `${factScore}% Score`);
-    setStageNodeState('qc_instructional', 'completed', `${instScore}% Score`);
-    addTelemetryLog('SUCCESS', `Stage 5: QC complete! Factual: ${factScore}%, Instructional: ${instScore}%.`);
-
-    // Stage 6: Instructor Dashboard Gate
-    el.liveStageLabel.textContent = '✅ Stage 6 Ready: Instructor Dashboard (Human-in-the-Loop)';
-    el.tickerStageBadge.textContent = 'STAGE 6: INSTRUCTOR REVIEW';
-    el.tickerStageBadge.className = 'ticker-badge bg-success';
-    el.tickerMessage.textContent = 'All AI pipelines complete! Lesson and independent QC reports delivered to Instructor Dashboard.';
-    setStageNodeState('instructor', 'active', 'Review Ready');
-    addTelemetryLog('SUCCESS', 'Stage 6: Ready for Instructor editing, recommendation decisioning, and approval.');
-
-    stopOrchestrationTimer();
-    showAlert('Complete AI Orchestration pipeline executed successfully! Loading lesson into Instructor Dashboard...', 'success');
-
-    // Load resulting lesson into Instructor Dashboard
-    if (runData.artifacts?.generatedLessonId) {
-      await loadLessonById(runData.artifacts.generatedLessonId);
-      await fetchSavedLessons();
-      setTimeout(() => switchView('view-dashboard'), 800);
+    if (runId) {
+      connectOrchestrationStream(runId);
+    } else if (result.data) {
+      handleLiveOrchestrationUpdate(result.data);
+      handleOrchestrationFinished(result.data);
     }
   } catch (err) {
     console.error('Orchestration error:', err);
@@ -578,7 +855,6 @@ async function handleStartFullOrchestration() {
       el.orchRecoveryBar.classList.remove('hidden');
       el.recoveryMessage.textContent = `Pipeline issue: ${err.message}. Previous versions & research evidence preserved intact.`;
     }
-  } finally {
     el.startFullOrchBtn.disabled = false;
     el.orchSpinner.classList.add('hidden');
     el.orchBtnText.textContent = 'Run Live AI Orchestration (End-to-End)';
@@ -708,6 +984,12 @@ async function loadLessonById(lessonId) {
 
     // Fetch QC Reports
     fetchQcReports(lesson._id);
+
+    // Fetch Research data for Evidence & Research Explorer
+    if (lesson.researchSessionId) {
+      state.currentResearchSessionId = lesson.researchSessionId;
+      loadResearchData(lesson.researchSessionId);
+    }
 
     // Update Live 45-Minute Duration meter
     recalculateDurations();
@@ -1018,6 +1300,23 @@ async function fetchQcReports(lessonId) {
 
     renderFactualQcCard(factual);
     renderInstructionalQcCard(instructional);
+
+    // Show or hide QC Improvement Loop notice if score < 80
+    const factScore = factual?.scores?.overall ?? 0;
+    const instScore = instructional?.scores?.overall ?? 0;
+    const isPassing = (factual?.status === 'passed' && factScore >= 80) &&
+                      (instructional?.status === 'passed' && instScore >= 80);
+
+    if (el.qcLoopNoticeBar) {
+      if ((factual || instructional) && !isPassing) {
+        el.qcLoopNoticeBar.classList.remove('hidden');
+        if (el.qcLoopNoticeText) {
+          el.qcLoopNoticeText.textContent = `Current Quality: Factual (${factScore}%), Instructional (${instScore}%). High-quality certified threshold is 80%. Click below to run the feedback loop and regenerate following all QC suggestions.`;
+        }
+      } else {
+        el.qcLoopNoticeBar.classList.add('hidden');
+      }
+    }
   } catch (err) {
     console.warn('Failed to load QC reports:', err);
   }
@@ -1032,9 +1331,9 @@ function renderFactualQcCard(report) {
     return;
   }
 
-  const score = report.scores?.overall ?? 75;
-  const isPass = score >= 70;
-  el.factualScoreBadge.textContent = `${score} / 100 ${isPass ? 'PASS' : 'FAIL'}`;
+  const score = report.scores?.overall ?? 80;
+  const isPass = score >= 80 && report.status === 'passed';
+  el.factualScoreBadge.textContent = `${score} / 100 ${isPass ? 'PASS (≥80%)' : 'FAIL (<80%)'}`;
   el.factualScoreBadge.className = `qc-score-badge ${isPass ? '' : 'failed'}`;
 
   // Outdated banner
@@ -1062,8 +1361,8 @@ function renderInstructionalQcCard(report) {
   }
 
   const score = report.scores?.overall ?? 80;
-  const isPass = score >= 70;
-  el.instructionalScoreBadge.textContent = `${score} / 100 ${isPass ? 'PASS' : 'FAIL'}`;
+  const isPass = score >= 80 && report.status === 'passed';
+  el.instructionalScoreBadge.textContent = `${score} / 100 ${isPass ? 'PASS (≥80%)' : 'FAIL (<80%)'}`;
   el.instructionalScoreBadge.className = `qc-score-badge ${isPass ? '' : 'failed'}`;
 
   // Outdated banner
@@ -1210,6 +1509,42 @@ async function handleRerunQc() {
     showAlert(`QC error: ${err.message}`, 'error');
   } finally {
     el.rerunQcBtn.disabled = false;
+  }
+}
+
+async function handleAutoImproveQcLoop() {
+  if (!state.currentLesson) return;
+
+  if (el.btnAutoImproveQcLoop) {
+    el.btnAutoImproveQcLoop.disabled = true;
+    el.btnAutoImproveQcLoop.textContent = '🔄 Running QC Feedback Loop...';
+  }
+
+  showAlert(`Following QC suggestions to regenerate lesson and achieve certified ≥80% quality...`, 'info');
+
+  try {
+    const res = await fetch(`/api/qc/loop-improve/${state.currentLesson._id}`, {
+      method: 'POST',
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.message || 'QC improvement loop failed');
+    }
+
+    const result = json.data;
+    showAlert(`QC Feedback Loop complete! New version generated (Factual: ${result.factualScore}%, Instructional: ${result.instructionalScore}%).`, 'success');
+
+    if (result.newLessonId) {
+      await loadLessonById(result.newLessonId);
+      await fetchSavedLessons();
+    }
+  } catch (err) {
+    showAlert(`QC loop error: ${err.message}`, 'error');
+  } finally {
+    if (el.btnAutoImproveQcLoop) {
+      el.btnAutoImproveQcLoop.disabled = false;
+      el.btnAutoImproveQcLoop.textContent = '🔄 Run QC Feedback Loop (Regenerate with Suggestions)';
+    }
   }
 }
 
@@ -1519,6 +1854,13 @@ async function handleRetryFailedStage() {
     if (el.orchRecoveryBar) el.orchRecoveryBar.classList.add('hidden');
     state.failedStage = null;
 
+    if (json.data) {
+      handleLiveOrchestrationUpdate(json.data);
+      if (json.data.status === 'completed') {
+        handleOrchestrationFinished(json.data);
+      }
+    }
+
     if (json.data?.artifacts?.generatedLessonId) {
       await loadLessonById(json.data.artifacts.generatedLessonId);
       await fetchSavedLessons();
@@ -1664,4 +2006,244 @@ function escapeHtml(str) {
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+// ── Evidence & Research Explorer Rendering ────────────────────────────────────
+
+async function loadResearchData(sessionId) {
+  if (!sessionId) return;
+  state.currentResearchSessionId = sessionId;
+
+  try {
+    const res = await fetch(`/api/research/${sessionId}`);
+    if (!res.ok) throw new Error('Failed to fetch research session');
+    const json = await res.json();
+    const data = json.data || {};
+
+    const session = data;
+    const evidence = session.evidence || [];
+    let sources = session.sources || [];
+
+    // Fallback: If sources array was empty in session response, fetch from sources endpoint
+    if (!sources || sources.length === 0) {
+      try {
+        const sRes = await fetch(`/api/research/${sessionId}/sources`);
+        if (sRes.ok) {
+          const sJson = await sRes.json();
+          sources = sJson.data || [];
+        }
+      } catch (e) {
+        console.warn('Sources route fetch warning:', e);
+      }
+    }
+
+    const webSources = sources.filter((s) => s.sourceType === 'web');
+    const bookSources = sources.filter((s) => s.sourceType === 'book');
+    const youtubeSources = sources.filter((s) => s.sourceType === 'youtube');
+    const execution = session.execution || null;
+    const steps = execution?.steps || [];
+
+    // Update tab counts
+    if (el.countEvidence) el.countEvidence.textContent = evidence.length;
+    if (el.countWeb) el.countWeb.textContent = webSources.length;
+    if (el.countBooks) el.countBooks.textContent = bookSources.length;
+    if (el.countYoutube) el.countYoutube.textContent = youtubeSources.length;
+    if (el.countLogs) el.countLogs.textContent = steps.length;
+
+    // Update Summary Header
+    if (el.evidenceSummaryText) {
+      el.evidenceSummaryText.innerHTML = `
+        Pedagogical research evidence gathered for <strong>"${escapeHtml(session.lessonTitle || 'Lesson')}"</strong>.
+        Total: <strong>${evidence.length}</strong> evidence quotes across <strong>${sources.length}</strong> multi-agent sources:
+        <span style="display:inline-block; margin-left:8px; padding:2px 8px; border-radius:12px; background:#e0f2fe; color:#0369a1; font-weight:600; font-size:0.75rem;">🌐 ${webSources.length} Web</span>
+        <span style="display:inline-block; margin-left:4px; padding:2px 8px; border-radius:12px; background:#fef3c7; color:#92400e; font-weight:600; font-size:0.75rem;">📚 ${bookSources.length} Books</span>
+        <span style="display:inline-block; margin-left:4px; padding:2px 8px; border-radius:12px; background:#fee2e2; color:#b91c1c; font-weight:600; font-size:0.75rem;">📺 ${youtubeSources.length} YouTube</span>
+      `;
+    }
+
+    // 1. Render Extracted Evidence Tab
+    renderEvidenceTab(evidence);
+
+    // 2. Render Web Sources Tab
+    renderWebSourcesTab(webSources);
+
+    // 3. Render Book Sources Tab
+    renderBookSourcesTab(bookSources);
+
+    // 4. Render YouTube Videos Tab
+    renderYouTubeSourcesTab(youtubeSources);
+
+    // 5. Render ReAct Trace Logs Tab
+    renderReActLogsTab(steps);
+  } catch (err) {
+    console.warn('[ResearchExplorer] Failed to load research data:', err.message);
+  }
+}
+
+async function loadLatestResearch() {
+  try {
+    const res = await fetch('/api/research/latest');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.data?._id) {
+        state.currentResearchSessionId = json.data._id;
+        loadResearchData(json.data._id);
+      }
+    }
+  } catch (err) {
+    console.warn('[ResearchExplorer] No recent research available:', err.message);
+  }
+}
+
+function renderEvidenceTab(evidence) {
+  if (!el.evidenceList) return;
+  if (!evidence || evidence.length === 0) {
+    el.evidenceList.innerHTML = '<div class="placeholder-box">No research evidence gathered yet.</div>';
+    return;
+  }
+
+  el.evidenceList.innerHTML = evidence.map((e) => {
+    const type = e.sourceType || 'web';
+    const relPercent = Math.round((e.relevance || 0.8) * 100);
+    const link = e.sourceUrl
+      ? `<a href="${e.sourceUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(e.sourceTitle || e.sourceUrl)}</a>`
+      : escapeHtml(e.sourceTitle || 'External Citation');
+
+    return `
+      <div class="evidence-item">
+        <div class="evidence-header">
+          <span class="evidence-source-type type-${type}">${escapeHtml(type.toUpperCase())}</span>
+          <span class="evidence-relevance">Relevance: ${relPercent}%</span>
+        </div>
+        <div class="evidence-text">"${escapeHtml(e.text || '')}"</div>
+        <div class="evidence-citation">
+          Source: ${link}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderWebSourcesTab(sources) {
+  if (!el.webSourcesGrid) return;
+  if (!sources || sources.length === 0) {
+    el.webSourcesGrid.innerHTML = '<div class="placeholder-box">No web sources collected yet.</div>';
+    return;
+  }
+
+  el.webSourcesGrid.innerHTML = sources.map((s) => {
+    let domain = s.domain;
+    if (!domain && s.url) {
+      try {
+        domain = new URL(s.url).hostname.replace(/^www\./, '');
+      } catch {
+        domain = 'web';
+      }
+    }
+    return `
+      <div class="source-card">
+        <div class="source-header">
+          <div class="source-title">
+            <a href="${s.url}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.title || 'Web Resource')}</a>
+          </div>
+          <span class="source-domain">${escapeHtml(domain || 'web')}</span>
+        </div>
+        ${s.snippet ? `<div class="source-snippet">${escapeHtml(s.snippet)}</div>` : ''}
+        ${s.extractedContent ? `<div class="source-extracted">${escapeHtml(s.extractedContent.slice(0, 500))}...</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderBookSourcesTab(sources) {
+  if (!el.bookSourcesGrid) return;
+  if (!sources || sources.length === 0) {
+    el.bookSourcesGrid.innerHTML = '<div class="placeholder-box">No book sources collected yet.</div>';
+    return;
+  }
+
+  el.bookSourcesGrid.innerHTML = sources.map((b) => {
+    const authorsStr = (b.authors && b.authors.length) ? b.authors.join(', ') : 'Academic Author';
+    const link = b.infoLink || b.url || '#';
+    const coverHtml = b.coverUrl
+      ? `<img src="${b.coverUrl}" alt="Book Cover" class="book-cover" onerror="this.outerHTML='<div class=\\'book-cover\\' style=\\'display:flex;align-items:center;justify-content:center;font-size:1.8rem;background:#fef3c7;\\'>📚</div>'" />`
+      : `<div class="book-cover" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem;background:#fef3c7;">📚</div>`;
+
+    return `
+      <div class="source-card">
+        <div class="book-card-body">
+          ${coverHtml}
+          <div class="book-details">
+            <div class="source-title">
+              <a href="${link}" target="_blank" rel="noopener noreferrer">${escapeHtml(b.title || 'Textbook Source')}</a>
+            </div>
+            <div class="book-meta">
+              <span>✍️ <strong>${escapeHtml(authorsStr)}</strong></span>
+              ${b.publisher ? ` • <span>🏢 ${escapeHtml(b.publisher)}</span>` : ''}
+              ${b.publishedDate ? ` • <span>📅 ${escapeHtml(b.publishedDate)}</span>` : ''}
+              ${b.pageCount ? ` • <span>📄 ${b.pageCount} pages</span>` : ''}
+              ${b.isbn ? ` • <span>ISBN: ${escapeHtml(b.isbn)}</span>` : ''}
+            </div>
+            ${b.description ? `<div class="source-snippet">${escapeHtml(b.description)}</div>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderYouTubeSourcesTab(sources) {
+  if (!el.youtubeSourcesGrid) return;
+  if (!sources || sources.length === 0) {
+    el.youtubeSourcesGrid.innerHTML = '<div class="placeholder-box">No video sources collected yet.</div>';
+    return;
+  }
+
+  el.youtubeSourcesGrid.innerHTML = sources.map((yt) => {
+    const link = yt.url || (yt.videoId ? `https://www.youtube.com/watch?v=${yt.videoId}` : '#');
+    const thumbHtml = yt.thumbnailUrl
+      ? `<img src="${yt.thumbnailUrl}" alt="Video Thumbnail" class="yt-thumb" onerror="this.outerHTML='<div class=\\'yt-thumb\\' style=\\'display:flex;align-items:center;justify-content:center;font-size:1.5rem;color:#ef4444;background:#18181b;\\'>▶️</div>'" />`
+      : `<div class="yt-thumb" style="display:flex;align-items:center;justify-content:center;font-size:1.5rem;color:#ef4444;background:#18181b;">▶️</div>`;
+
+    return `
+      <div class="source-card">
+        <div class="yt-card-body">
+          ${thumbHtml}
+          <div class="yt-details">
+            <div class="source-title">
+              <a href="${link}" target="_blank" rel="noopener noreferrer">${escapeHtml(yt.title || 'Lecture Video')}</a>
+            </div>
+            <div class="book-meta">
+              ${yt.channelTitle ? `<span>📺 <strong>${escapeHtml(yt.channelTitle)}</strong></span>` : ''}
+              ${yt.publishedAt ? ` • <span>📅 ${new Date(yt.publishedAt).toLocaleDateString()}</span>` : ''}
+            </div>
+            ${yt.snippet ? `<div class="source-snippet">${escapeHtml(yt.snippet)}</div>` : ''}
+            ${yt.transcript ? `<div class="yt-transcript-box"><strong>Transcript text:</strong> "${escapeHtml(yt.transcript.slice(0, 450))}..."</div>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderReActLogsTab(steps) {
+  if (!el.reactLogContainer) return;
+  if (!steps || steps.length === 0) {
+    el.reactLogContainer.innerHTML = '<div class="placeholder-box">Trace logs will appear when an agent workflow executes.</div>';
+    return;
+  }
+
+  el.reactLogContainer.innerHTML = steps.map((s, idx) => {
+    return `
+      <div class="react-step-card">
+        <div class="react-step-header">
+          <span class="agent-name-badge bg-primary text-light">${escapeHtml(s.agent || 'Agent')}</span>
+          <span class="text-muted" style="font-size:0.75rem;">Step #${idx + 1} • Iteration ${s.iteration || 1} • ${s.durationMs || 0}ms • Status: <strong>${escapeHtml(s.status || 'done')}</strong></span>
+        </div>
+        <div><strong>Action:</strong> <code>${escapeHtml(s.action || 'execute')}</code></div>
+        ${s.reasoning ? `<div><strong>Reasoning:</strong> <em>${escapeHtml(s.reasoning)}</em></div>` : ''}
+        ${s.observation ? `<div><strong>Observation:</strong> ${escapeHtml(s.observation)}</div>` : ''}
+      </div>
+    `;
+  }).join('');
 }

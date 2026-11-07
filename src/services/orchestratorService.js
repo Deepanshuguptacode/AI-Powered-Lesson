@@ -18,15 +18,19 @@
  *   2. supervisor_plan   — LangGraph.js ReAct Decomposition & Query Generation
  *   3. parallel_research — Web, Book & YouTube Agents running concurrently
  *   4. lesson_generator  — 45-Minute Synthesizer & Strict Duration Validator
- *   5. parallel_qc       — Independent Factual & Instructional QC Agents
+ *   4b. qc_loop          — LangGraph iterative QC feedback loop (conditional edges)
+ *   5. parallel_qc       — Independent Factual & Instructional QC Agents (run inside qc_loop)
  *   6. instructor_review — Dashboard Review, QC Decisioning, Versioning & Approval
+ *
+ * The QC feedback loop (stages 4+5) is driven by a native LangGraph iterative
+ * workflow (addConditionalEdges in lessonQcLoopGraph.js), not an external while-loop.
+ * onQcLoopProgress callbacks from the graph node emit SSE events per loop iteration.
  */
 
 const { EventEmitter } = require('events');
 const { evaluateInputGuardrails, GUARDRAIL_MODEL } = require('./inputGuardrails');
 const { runResearchGraph } = require('../agents/researchGraph');
-const { runLessonGraph } = require('../agents/lessonGraph');
-const { runQcGraphs } = require('../agents/qcGraph');
+const { runFullLessonQcGraph } = require('../agents/lessonQcLoopGraph');
 const {
   saveWorkflowExecution,
   findWorkflowExecutionByRunId,
@@ -286,67 +290,170 @@ async function executeFullOrchestration({ title, learningObjective, runId = null
       throw researchErr;
     }
 
-    // ── STAGE 4: 45-Minute Lesson Synthesizer & Duration Validator ─────────────
+    // ── STAGES 4+5: Lesson Synthesizer + QC Feedback Loop (LangGraph iterative) ─
+    // The QC feedback loop is driven entirely by native LangGraph conditional edges
+    // inside lessonQcLoopGraph.js (addConditionalEdges). No external while-loop exists.
+    // SSE events are emitted per loop iteration via the onQcLoopProgress callback.
+    const QC_THRESHOLD = parseInt(process.env.QC_THRESHOLD || process.env.LESSON_QC_THRESHOLD || '80', 10);
+    const MAX_QC_LOOPS = parseInt(process.env.MAX_QC_LOOPS || '3', 10);
+
     const s4Start = Date.now();
-    updateRunStage(actualRunId, 'lesson_generator', 'running', 'node_lesson_generator', 'LangGraph Lesson Generator synthesizing grounded 45-minute lesson and validating strict section durations...');
+    updateRunStage(actualRunId, 'lesson_generator', 'running', 'node_lesson_generator',
+      `LangGraph iterative workflow starting: Lesson generation + QC feedback loop (up to ${MAX_QC_LOOPS} passes, threshold ≥ ${QC_THRESHOLD}%)...`);
+    await sleep(300);
 
-    await sleep(350);
+    // ── onQcLoopProgress callback — maps LangGraph node events → SSE ──────────
+    /**
+     * Called by runParallelQcNode inside lessonQcLoopGraph at each QC pass.
+     * Translates graph node progress events into orchestrator SSE events.
+     *
+     * @param {object} event
+     * @param {'qc_running'|'qc_passed'|'qc_failed_loop'|'qc_exhausted'|'finalized'} event.type
+     * @param {number}  event.loopPass
+     * @param {number}  event.maxLoops
+     * @param {number}  [event.factScore]
+     * @param {number}  [event.instScore]
+     * @param {string}  event.activeNode
+     * @param {string}  event.message
+     */
+    function onQcLoopProgress(event) {
+      const { type, loopPass, maxLoops, factScore, instScore, activeNode, message, suggestionsCount } = event;
 
-    let lessonResult;
+      switch (type) {
+        case 'qc_running':
+          // QC agents just started for this loop pass
+          updateRunStage(actualRunId, 'parallel_qc', 'running', activeNode || 'node_qc_parallel', message, {
+            qcLoopPass: loopPass,
+            maxQcLoops: maxLoops,
+          });
+          break;
+
+        case 'qc_passed':
+          // QC passed — mark both stages complete
+          run.stages.parallel_qc.status = 'completed';
+          run.stages.lesson_generator.status = 'completed';
+          updateRunStage(actualRunId, 'parallel_qc', 'completed', activeNode || 'node_qc_parallel', message, {
+            factualScore:         factScore,
+            instructionalScore:   instScore,
+            qcPassed:             true,
+            qcLoopPass:           loopPass,
+          });
+          break;
+
+        case 'qc_failed_loop':
+          // QC failed, looping back — emit feedback loop stage event
+          run.stages.qc_loop = run.stages.qc_loop || {
+            id: 'stage_4b', name: 'QC Feedback Loop', status: 'running', data: null,
+          };
+          run.stages.qc_loop.status = 'running';
+          updateRunStage(actualRunId, 'qc_loop', 'running', 'node_qc_loop', message, {
+            factualScore:         factScore,
+            instructionalScore:   instScore,
+            qcPassed:             false,
+            qcLoopPass:           loopPass,
+            maxQcLoops:           maxLoops,
+            suggestionsCount:     suggestionsCount || 0,
+          });
+          // Also emit regenerating on lesson_generator node so the frontend loop arrow activates
+          updateRunStage(actualRunId, 'lesson_generator', 'running', 'node_lesson_generator',
+            `[QC Loop ${loopPass + 1}/${maxLoops}] Regenerating lesson with ${suggestionsCount || 0} QC improvement suggestions...`);
+          break;
+
+        case 'qc_exhausted':
+          // Max loops reached — accept best lesson
+          run.stages.parallel_qc.status = 'completed';
+          run.stages.lesson_generator.status = 'completed';
+          if (run.stages.qc_loop) run.stages.qc_loop.status = 'completed';
+          updateRunStage(actualRunId, 'parallel_qc', 'completed', activeNode || 'node_qc_parallel', message, {
+            factualScore:       factScore,
+            instructionalScore: instScore,
+            qcPassed:           false,
+            qcLoopPass:         loopPass,
+          });
+          break;
+
+        case 'finalized':
+          // Pipeline complete — will be handled after graph returns
+          break;
+
+        default:
+          console.warn(`[AI Orchestrator] Unknown onQcLoopProgress type: ${type}`);
+      }
+    }
+
+    let fullResult;
     try {
-      lessonResult = await runLessonGraph({
-        lessonTitle: title,
+      fullResult = await runFullLessonQcGraph({
+        lessonTitle:   title,
         learningObjective,
         researchSessionId: researchResult.sessionId,
+        qcThreshold:   QC_THRESHOLD,
+        maxQcLoops:    MAX_QC_LOOPS,
+        onQcLoopProgress,
       });
 
+      // ── Post-graph SSE updates ────────────────────────────────────────────
       run.stages.lesson_generator.durationMs = Date.now() - s4Start;
       run.stages.lesson_generator.status = 'completed';
-      run.artifacts.generatedLessonId = lessonResult.savedLessonId;
-      run.artifacts.lesson = lessonResult.lesson;
 
-      updateRunStage(actualRunId, 'lesson_generator', 'completed', 'node_validator', `Lesson synthesized (${lessonResult.lesson?.totalDurationMinutes || 45}m duration validated). Saved to MongoDB as v1.0.`, {
-        savedLessonId: lessonResult.savedLessonId,
-        isValid: lessonResult.isValid,
-        totalDurationMinutes: lessonResult.lesson?.totalDurationMinutes || 45,
-      });
+      if (fullResult.savedLessonId) {
+        run.artifacts.generatedLessonId = fullResult.savedLessonId;
+      }
+      run.artifacts.lesson = fullResult.lesson;
+      run.artifacts.qcReports = {
+        factual:       fullResult.qcReports?.factual       || null,
+        instructional: fullResult.qcReports?.instructional || null,
+      };
+
+      const loopHistory  = fullResult.qcLoopHistory || [];
+      const lastPass     = loopHistory.length > 0 ? loopHistory[loopHistory.length - 1] : null;
+      const factScore    = lastPass?.factScore    ?? fullResult.qcReports?.factual?.scores?.overall ?? 0;
+      const instScore    = lastPass?.instScore    ?? fullResult.qcReports?.instructional?.scores?.overall ?? 0;
+      const loopPasses   = fullResult.qcLoopPass  || 1;
+      const qcLoopPassed = fullResult.qcLoopPassed;
+
+      // If qc_passed event wasn't already fired (e.g. QC was exhausted), mark now
+      if (run.stages.parallel_qc.status !== 'completed') {
+        run.stages.parallel_qc.status = 'completed';
+        updateRunStage(actualRunId, 'parallel_qc', 'completed', 'node_qc_parallel',
+          `Parallel QC complete after ${loopPasses} loop pass(es). Factual: ${factScore}%, Instructional: ${instScore}%. ${qcLoopPassed ? `PASSED ✓ (≥${QC_THRESHOLD}%)` : `Best lesson preserved for Instructor Review.`}`, {
+            factualScore:       factScore,
+            instructionalScore: instScore,
+            qcPassed:           qcLoopPassed,
+            qcLoopPass:         loopPasses,
+            loopHistory,
+          });
+      }
+
+      updateRunStage(actualRunId, 'lesson_generator', 'completed', 'node_validator',
+        `Lesson synthesized & validated (${fullResult.lesson?.totalDurationMinutes || 45}m). Saved v${fullResult.lesson?.version || 1}.0 after ${loopPasses} QC loop pass(es). QC ${qcLoopPassed ? 'PASSED ✓' : `accepted at ${factScore}%/${instScore}%`}`, {
+          savedLessonId:     fullResult.savedLessonId,
+          isValid:           fullResult.isValid,
+          qcLoopPassed,
+          qcLoopPass:        loopPasses,
+          factualScore:      factScore,
+          instructionalScore: instScore,
+        });
     } catch (genErr) {
       run.stages.lesson_generator.status = 'failed';
       run.stages.lesson_generator.error = genErr.message;
-      updateRunStage(actualRunId, 'lesson_generator', 'failed', 'node_lesson_generator', `Lesson synthesizer encountered an error: ${genErr.message}. Preserved prior versions if any. Ready for retry.`, { error: genErr.message });
+
+      if (genErr.code === 'INVALID_INPUT') {
+        run.status = 'failed';
+        run.isLocked = false;
+        run.error = genErr.message;
+        run.endTime = new Date();
+        await updateWorkflowExecution(actualRunId, { status: 'failed', isLocked: false, error: run.error, endTime: run.endTime });
+        updateRunStage(actualRunId, 'lesson_generator', 'failed', 'node_lesson_generator',
+          `Input validation failed: ${genErr.message}. Please provide a valid lesson title and learning objective.`,
+          { error: genErr.message, validationErrors: genErr.validationErrors });
+        return run;
+      }
+
+      updateRunStage(actualRunId, 'lesson_generator', 'failed', 'node_lesson_generator',
+        `Lesson generator encountered an error: ${genErr.message}. ${run.artifacts.generatedLessonId ? 'Previously saved lesson is preserved.' : ''} Ready for retry.`,
+        { error: genErr.message });
       throw genErr;
-    }
-
-    // ── STAGE 5: Parallel QC Audit Agents ──────────────────────────────────────
-    const s5Start = Date.now();
-    updateRunStage(actualRunId, 'parallel_qc', 'running', 'node_qc_parallel', 'Running Factual QC Agent and Instructional QC Agent concurrently via Promise.allSettled()...');
-
-    await sleep(350);
-
-    let qcResult;
-    try {
-      qcResult = await runQcGraphs({
-        generatedLessonId: lessonResult.savedLessonId,
-      });
-
-      run.stages.parallel_qc.durationMs = Date.now() - s5Start;
-      run.stages.parallel_qc.status = 'completed';
-      run.artifacts.qcReports = {
-        factual: qcResult.factual,
-        instructional: qcResult.instructional,
-      };
-
-      updateRunStage(actualRunId, 'parallel_qc', 'completed', 'node_qc_parallel', `Parallel QC complete! Factual QC Score: ${qcResult.factual.scores?.overall ?? 'N/A'}, Instructional QC Score: ${qcResult.instructional.scores?.overall ?? 'N/A'}.`, {
-        factualStatus: qcResult.factual.status,
-        factualScore: qcResult.factual.scores?.overall,
-        instructionalStatus: qcResult.instructional.status,
-        instructionalScore: qcResult.instructional.scores?.overall,
-      });
-    } catch (qcErr) {
-      run.stages.parallel_qc.status = 'failed';
-      run.stages.parallel_qc.error = qcErr.message;
-      updateRunStage(actualRunId, 'parallel_qc', 'failed', 'node_qc_parallel', `QC audit encountered an error: ${qcErr.message}. Saved lesson is preserved intact. Ready for retry.`, { error: qcErr.message });
-      throw qcErr;
     }
 
     // ── STAGE 6: Instructor Dashboard Ready (Human-in-the-Loop) ───────────────
@@ -448,25 +555,51 @@ async function retryWorkflowStage(runId, stageKey, { autoContinue = true } = {})
     // ── RETRY: LESSON GENERATOR ───────────────────────────────────────────────
     else if (targetStage === 'lesson_generator') {
       const gStart = Date.now();
-      updateRunStage(runId, 'lesson_generator', 'running', 'node_lesson_generator', `[Retry #${attemptNum}] Rerunning 45-Minute Lesson Synthesizer with grounded research evidence...`);
+      updateRunStage(runId, 'lesson_generator', 'running', 'node_lesson_generator', `[Retry #${attemptNum}] Rerunning full Lesson + QC feedback loop graph...`);
 
-      const lessonResult = await runLessonGraph({
-        lessonTitle: run.lessonTitle,
+      const retryQcThreshold = parseInt(process.env.QC_THRESHOLD || process.env.LESSON_QC_THRESHOLD || '80', 10);
+      const retryMaxQcLoops  = parseInt(process.env.MAX_QC_LOOPS || '3', 10);
+
+      const fullResult = await runFullLessonQcGraph({
+        lessonTitle:       run.lessonTitle,
         learningObjective: run.learningObjective,
         researchSessionId: run.artifacts.researchSessionId || null,
+        qcThreshold:       retryQcThreshold,
+        maxQcLoops:        retryMaxQcLoops,
+        onQcLoopProgress:  (event) => {
+          // Forward loop progress events during retry
+          if (event.type === 'qc_running' || event.type === 'qc_failed_loop') {
+            updateRunStage(runId, 'qc_loop', 'running', 'node_qc_loop', event.message);
+          }
+        },
       });
 
       stage.durationMs = Date.now() - gStart;
       stage.status = 'completed';
       stage.error = null;
-      run.artifacts.generatedLessonId = lessonResult.savedLessonId;
-      run.artifacts.lesson = lessonResult.lesson;
+      // Preserve prior generated lesson ID if new save failed
+      if (fullResult.savedLessonId) {
+        run.artifacts.generatedLessonId = fullResult.savedLessonId;
+      }
+      run.artifacts.lesson = fullResult.lesson;
+      run.artifacts.qcReports = {
+        factual:       fullResult.qcReports?.factual       || null,
+        instructional: fullResult.qcReports?.instructional || null,
+      };
       retryLog.status = 'recovered';
 
-      updateRunStage(runId, 'lesson_generator', 'completed', 'node_validator', `[Retry #${attemptNum} Recovered] Lesson synthesized (${lessonResult.lesson?.totalDurationMinutes || 45}m duration validated). Prior instructor edits preserved.`);
+      const loopInfo = ` [QC loop: ${fullResult.qcLoopPass} pass(es), Factual: ${fullResult.qcReports?.factual?.scores?.overall ?? 'N/A'}%, Instructional: ${fullResult.qcReports?.instructional?.scores?.overall ?? 'N/A'}%, passed: ${fullResult.qcLoopPassed}]`;
+
+      updateRunStage(runId, 'lesson_generator', 'completed', 'node_validator', `[Retry #${attemptNum} Recovered] Lesson synthesized (${fullResult.lesson?.totalDurationMinutes || 45}m duration validated). Prior instructor edits preserved.${loopInfo}`);
+      updateRunStage(runId, 'parallel_qc', 'completed', 'node_qc_parallel', `[Retry #${attemptNum}] QC complete — Factual: ${fullResult.qcReports?.factual?.scores?.overall ?? 'N/A'}%, Instructional: ${fullResult.qcReports?.instructional?.scores?.overall ?? 'N/A'}%.`);
 
       if (autoContinue) {
-        return await retryWorkflowStage(runId, 'parallel_qc', { autoContinue: false });
+        // QC already ran inside the graph — go straight to instructor review
+        run.stages.instructor_review.status = 'completed';
+        run.status = 'completed';
+        run.isLocked = false;
+        run.endTime = new Date();
+        updateRunStage(runId, 'instructor_review', 'completed', 'node_instructor_gate', 'Pipeline recovered and complete. Ready for instructor dashboard review.');
       }
     }
 
@@ -479,6 +612,8 @@ async function retryWorkflowStage(runId, stageKey, { autoContinue = true } = {})
         throw new Error('Cannot run QC retry: No generated lesson ID found in artifacts.');
       }
 
+      // Import runQcGraphs directly for QC-only retry
+      const { runQcGraphs } = require('../agents/qcGraph');
       const qcResult = await runQcGraphs({
         generatedLessonId: run.artifacts.generatedLessonId,
       });
