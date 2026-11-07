@@ -7,6 +7,7 @@
 // ── Application State ─────────────────────────────────────────────────────────
 const state = {
   currentRunId: null,
+  failedStage: null,
   activeView: 'view-orchestrator',
   currentLesson: null,         // Currently loaded GeneratedLesson doc
   lessonVersions: [],          // Array of all versions for current lesson root
@@ -166,6 +167,16 @@ const el = {
   lessonPreviewContainer: document.getElementById('lessonPreviewContainer'),
   btnPrintLesson: document.getElementById('btnPrintLesson'),
   btnExportJson: document.getElementById('btnExportJson'),
+  btnExportPdf: document.getElementById('btnExportPdf'),
+  btnExportDocx: document.getElementById('btnExportDocx'),
+  btnDashExportPdf: document.getElementById('btnDashExportPdf'),
+  btnDashExportDocx: document.getElementById('btnDashExportDocx'),
+
+  // Recovery & Retry
+  orchRecoveryBar: document.getElementById('orchRecoveryBar'),
+  recoveryMessage: document.getElementById('recoveryMessage'),
+  btnRetryFailedStage: document.getElementById('btnRetryFailedStage'),
+  btnCancelExecution: document.getElementById('btnCancelExecution'),
 
   // Research Tabs & Grids
   tabButtons: document.querySelectorAll('.tab-btn'),
@@ -271,10 +282,18 @@ function initEventListeners() {
     }
   });
 
-  // Preview Buttons
+  // Preview & Export Buttons
   el.btnPreviewInModal.addEventListener('click', () => switchView('view-preview'));
   el.btnPrintLesson.addEventListener('click', () => window.print());
   el.btnExportJson.addEventListener('click', handleExportJson);
+  if (el.btnExportPdf) el.btnExportPdf.addEventListener('click', handleExportPdf);
+  if (el.btnDashExportPdf) el.btnDashExportPdf.addEventListener('click', handleExportPdf);
+  if (el.btnExportDocx) el.btnExportDocx.addEventListener('click', handleExportDocx);
+  if (el.btnDashExportDocx) el.btnDashExportDocx.addEventListener('click', handleExportDocx);
+
+  // Recovery & Stage Retry Actions
+  if (el.btnRetryFailedStage) el.btnRetryFailedStage.addEventListener('click', handleRetryFailedStage);
+  if (el.btnCancelExecution) el.btnCancelExecution.addEventListener('click', handleCancelExecution);
 
   // Research Explorer Tabs
   el.tabButtons.forEach((btn) => {
@@ -444,6 +463,22 @@ async function handleStartFullOrchestration() {
 
     const result = await response.json();
 
+    if (response.status === 409) {
+      const errMsg = result.message || 'Workflow execution is already actively running for this topic.';
+      el.tickerStageBadge.textContent = 'ACTIVE RUN';
+      el.tickerStageBadge.className = 'ticker-badge bg-warning';
+      el.tickerMessage.textContent = errMsg;
+      addTelemetryLog('FAILED', `Duplicate Guard: ${errMsg}`);
+      showAlert(errMsg, 'error');
+      state.currentRunId = result.runId;
+      state.failedStage = 'parallel_research';
+      if (el.orchRecoveryBar) {
+        el.orchRecoveryBar.classList.remove('hidden');
+        el.recoveryMessage.textContent = errMsg;
+      }
+      return;
+    }
+
     if (!response.ok || !result.success) {
       const errMsg = result.guardrail?.reasoning || result.message || 'Pipeline aborted by AI Guardrails.';
       setStageNodeState('guardrails', 'failed', 'Rejected');
@@ -457,6 +492,8 @@ async function handleStartFullOrchestration() {
     }
 
     const runData = result.data;
+    state.currentRunId = runData.runId;
+    if (el.orchRecoveryBar) el.orchRecoveryBar.classList.add('hidden');
 
     // Stage 1 complete
     setStageNodeState('guardrails', 'completed', 'Passed');
@@ -537,6 +574,10 @@ async function handleStartFullOrchestration() {
     console.error('Orchestration error:', err);
     showAlert(`Orchestration failed: ${err.message}`, 'error');
     addTelemetryLog('FAILED', `Fatal error: ${err.message}`);
+    if (el.orchRecoveryBar) {
+      el.orchRecoveryBar.classList.remove('hidden');
+      el.recoveryMessage.textContent = `Pipeline issue: ${err.message}. Previous versions & research evidence preserved intact.`;
+    }
   } finally {
     el.startFullOrchBtn.disabled = false;
     el.orchSpinner.classList.add('hidden');
@@ -1385,6 +1426,126 @@ function handleExportJson() {
   dlAnchor.setAttribute('href', dataStr);
   dlAnchor.setAttribute('download', `${(state.currentLesson.title || 'lesson').replace(/\s+/g, '_')}_${state.currentLesson.versionTag || 'v1'}.json`);
   dlAnchor.click();
+}
+
+async function handleExportPdf() {
+  if (!state.currentLesson) {
+    showAlert('No lesson loaded to export. Please select or generate a lesson first.', 'error');
+    return;
+  }
+  if (!state.currentLesson.isApproved) {
+    showAlert('Export Forbidden: Only approved lessons can be exported. Please grant Formal Instructor Approval first.', 'error');
+    openApprovalModal();
+    return;
+  }
+
+  showAlert('Generating certified PDF export package with attached QC audit...', 'info');
+  try {
+    const res = await fetch(`/api/export/${state.currentLesson._id}/pdf`);
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.message || `Export failed with status ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `${(state.currentLesson.title || 'lesson').replace(/[^a-zA-Z0-9_-]/g, '_')}_${state.currentLesson.versionTag || 'v1.0'}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+    showAlert('PDF export package downloaded successfully!', 'success');
+  } catch (err) {
+    showAlert(`PDF Export error: ${err.message}`, 'error');
+  }
+}
+
+async function handleExportDocx() {
+  if (!state.currentLesson) {
+    showAlert('No lesson loaded to export. Please select or generate a lesson first.', 'error');
+    return;
+  }
+  if (!state.currentLesson.isApproved) {
+    showAlert('Export Forbidden: Only approved lessons can be exported. Please grant Formal Instructor Approval first.', 'error');
+    openApprovalModal();
+    return;
+  }
+
+  showAlert('Generating certified Microsoft Word (DOCX) package with attached QC audit...', 'info');
+  try {
+    const res = await fetch(`/api/export/${state.currentLesson._id}/docx`);
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.message || `Export failed with status ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `${(state.currentLesson.title || 'lesson').replace(/[^a-zA-Z0-9_-]/g, '_')}_${state.currentLesson.versionTag || 'v1.0'}.docx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+    showAlert('Word (DOCX) export package downloaded successfully!', 'success');
+  } catch (err) {
+    showAlert(`DOCX Export error: ${err.message}`, 'error');
+  }
+}
+
+async function handleRetryFailedStage() {
+  if (!state.currentRunId) {
+    showAlert('No active workflow run found to retry.', 'error');
+    return;
+  }
+  const stage = state.failedStage || 'parallel_research';
+  showAlert(`Retrying stage "${stage}" with safe failure recovery...`, 'info');
+  if (el.btnRetryFailedStage) el.btnRetryFailedStage.disabled = true;
+
+  try {
+    const res = await fetch(`/api/orchestration/retry/${state.currentRunId}/${stage}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoContinue: true }),
+    });
+
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json.message || 'Retry failed');
+
+    showAlert(`Stage "${stage}" recovered successfully! Pipeline updated.`, 'success');
+    if (el.orchRecoveryBar) el.orchRecoveryBar.classList.add('hidden');
+    state.failedStage = null;
+
+    if (json.data?.artifacts?.generatedLessonId) {
+      await loadLessonById(json.data.artifacts.generatedLessonId);
+      await fetchSavedLessons();
+    }
+  } catch (err) {
+    showAlert(`Retry error: ${err.message}`, 'error');
+  } finally {
+    if (el.btnRetryFailedStage) el.btnRetryFailedStage.disabled = false;
+  }
+}
+
+async function handleCancelExecution() {
+  if (!state.currentRunId) {
+    if (el.orchRecoveryBar) el.orchRecoveryBar.classList.add('hidden');
+    return;
+  }
+
+  try {
+    await fetch(`/api/orchestration/cancel/${state.currentRunId}`, { method: 'POST' });
+    showAlert('Workflow execution cancelled and lock released.', 'info');
+    if (el.orchRecoveryBar) el.orchRecoveryBar.classList.add('hidden');
+    state.currentRunId = null;
+    state.failedStage = null;
+    stopOrchestrationTimer();
+  } catch (err) {
+    showAlert(`Cancel error: ${err.message}`, 'error');
+  }
 }
 
 // ── Saved Lessons List ───────────────────────────────────────────────────────

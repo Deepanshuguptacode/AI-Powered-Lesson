@@ -222,6 +222,18 @@
               <span class="ticker-timer" id="tickerTimer">0.0s</span>
             </div>
 
+            <!-- Live Recovery & Retry Bar -->
+            <div class="orchestration-recovery-bar hidden" id="orchRecoveryBar">
+              <div class="recovery-info">
+                <span class="recovery-icon">⚠️</span>
+                <span class="recovery-text" id="recoveryMessage">Pipeline encountered an issue. Prior versions and research evidence are preserved intact.</span>
+              </div>
+              <div class="recovery-buttons">
+                <button type="button" class="btn btn-sm btn-warning" id="btnRetryFailedStage">🔄 Retry Failed Stage</button>
+                <button type="button" class="btn btn-sm btn-ghost text-light" id="btnCancelExecution">❌ Cancel</button>
+              </div>
+            </div>
+
             <!-- Complete Architecture Diagram Flowchart -->
             <div class="architecture-diagram-container">
               <!-- Stage 1: Input Guardrails -->
@@ -424,6 +436,12 @@
                 </button>
                 <button type="button" id="rerunQcBtn" class="btn btn-secondary" title="Re-run both QC agents on current version">
                   🔄 Re-run QC
+                </button>
+                <button type="button" id="btnDashExportPdf" class="btn btn-secondary" title="Export Approved Lesson to PDF">
+                  📄 Export PDF
+                </button>
+                <button type="button" id="btnDashExportDocx" class="btn btn-secondary" title="Export Approved Lesson to DOCX">
+                  📝 Export DOCX
                 </button>
               </div>
             </div>
@@ -707,7 +725,9 @@
               </div>
               <div class="preview-actions">
                 <button type="button" class="btn btn-secondary" id="btnPrintLesson">🖨️ Print Lesson</button>
-                <button type="button" class="btn btn-secondary" id="btnExportJson">⬇️ Download JSON</button>
+                <button type="button" class="btn btn-secondary" id="btnExportJson">⬇️ JSON</button>
+                <button type="button" class="btn btn-primary" id="btnExportPdf" title="Export Certified Lesson to PDF">📄 Export PDF</button>
+                <button type="button" class="btn btn-primary" id="btnExportDocx" title="Export Certified Lesson to DOCX">📝 Export DOCX</button>
               </div>
             </div>
             <div class="lesson-preview-container" id="lessonPreviewContainer">

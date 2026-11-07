@@ -19,7 +19,7 @@ const qcIssueSchema = new mongoose.Schema(
   {
     issueNumber:          { type: Number },
     description:          { type: String, required: true },
-    severity:             { type: String, enum: ['critical', 'major', 'minor', 'info'], default: 'minor' },
+    severity:             { type: String, enum: ['critical', 'high', 'major', 'moderate', 'medium', 'minor', 'low', 'info'], default: 'minor' },
     affectedSection:      { type: String, default: '' }, // e.g. 'coreConcepts', 'examples'
     suggestedImprovement: { type: String, default: '' },
     evidenceRef:          { type: String, default: '' }, // source URL that contradicts/supports

@@ -251,17 +251,38 @@ async function callLLMJson(messages, opts = {}) {
     try {
       return { data: JSON.parse(cleaned), ...result };
     } catch (_) {
-      // 4. Extract first balanced { ... } or [ ... ]
+      // 4. Try cleaning trailing commas
+      const noTrailingCommas = cleaned.replace(/,\s*([}\]])/g, '$1');
+      try {
+        return { data: JSON.parse(noTrailingCommas), ...result };
+      } catch (_) {}
+
+      // 5. Extract first balanced { ... } or [ ... ]
       const jsonMatch = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
       if (jsonMatch) {
-        return { data: JSON.parse(jsonMatch[0]), ...result };
+        try {
+          return { data: JSON.parse(jsonMatch[0]), ...result };
+        } catch (_) {
+          const matchNoTrailing = jsonMatch[0].replace(/,\s*([}\]])/g, '$1');
+          try {
+            return { data: JSON.parse(matchNoTrailing), ...result };
+          } catch (_) {}
+        }
       }
     }
 
-    return { data: null, rawContent: raw, ...result };
+    // 6. If parsing failed, fall back to structured fallback
+    console.warn('[LLMGateway] JSON parsing of LLM response failed. Generating structured fallback.');
+    const fallback = await hallucinateResponse(messages, opts);
+    return { data: JSON.parse(fallback), isFallback: true, ...result };
   } catch (parseErr) {
     console.warn('[LLMGateway] Failed to parse JSON response:', parseErr.message);
-    return { data: null, rawContent: raw, ...result };
+    try {
+      const fallback = await hallucinateResponse(messages, opts);
+      return { data: JSON.parse(fallback), isFallback: true, ...result };
+    } catch (_) {
+      return { data: null, rawContent: raw, ...result };
+    }
   }
 }
 

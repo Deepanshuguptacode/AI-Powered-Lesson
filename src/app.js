@@ -9,6 +9,7 @@ const lessonGeneratorRoutes = require('./routes/lessonGeneratorRoutes');
 const qcRoutes              = require('./routes/qcRoutes');
 const guardrailRoutes       = require('./routes/guardrailRoutes');
 const orchestrationRoutes   = require('./routes/orchestrationRoutes');
+const exportRoutes          = require('./routes/exportRoutes');
 const { notFoundHandler, errorHandler } = require('./middlewares/errorHandler');
 
 const app = express();
@@ -42,6 +43,7 @@ app.use('/api/research',      researchRoutes);
 app.use('/api/agent',         agentRoutes);
 app.use('/api/generate',      lessonGeneratorRoutes);
 app.use('/api/qc',            qcRoutes);
+app.use('/api/export',        exportRoutes);
 
 // Fallback to index.html for root if needed (though express.static serves index.html by default)
 app.get('/', (req, res) => {

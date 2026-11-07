@@ -242,7 +242,21 @@ Return ONLY this JSON structure (no markdown, no extra text):
     }
   );
 
-  const rawLessonJson = result.data;
+  let rawLessonJson = result.data;
+
+  if (!rawLessonJson) {
+    console.warn('[LessonGenerator] LLM JSON parsing failed. Generating lesson via structured fallback...');
+    try {
+      const { hallucinateResponse } = require('../services/llmGateway');
+      const fallbackStr = await hallucinateResponse([new HumanMessage(prompt)], { model: 'openai/gpt-oss-120b' });
+      rawLessonJson = JSON.parse(fallbackStr);
+      rawLessonJson.title = lessonTitle;
+      rawLessonJson.learningObjective = learningObjective;
+      rawLessonJson.totalDurationMinutes = 45;
+    } catch (fbErr) {
+      console.error('[LessonGenerator] Fallback lesson synthesis failed:', fbErr.message);
+    }
+  }
 
   if (!rawLessonJson) {
     console.error('[LessonGenerator] LLM returned null/unparseable JSON');

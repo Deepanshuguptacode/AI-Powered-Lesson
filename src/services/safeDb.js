@@ -14,6 +14,7 @@ const ResearchSource   = require('../models/ResearchSource');
 const AgentExecution   = require('../models/AgentExecution');
 const GeneratedLesson  = require('../models/GeneratedLesson');
 const QcReport         = require('../models/QcReport');
+const WorkflowExecution = require('../models/WorkflowExecution');
 
 const Lesson = require('../models/Lesson');
 
@@ -24,6 +25,7 @@ const memStore = {
   executions: new Map(),
   generatedLessons: new Map(),
   qcReports: new Map(),
+  workflows: new Map(),
 };
 
 function isDbConnected() {
@@ -60,7 +62,7 @@ async function createSession(data) {
 async function updateSession(id, updateData) {
   if (isDbConnected()) {
     try {
-      const doc = await ResearchSession.findByIdAndUpdate(id, updateData, { new: true }).lean();
+      const doc = await ResearchSession.findByIdAndUpdate(id, updateData, { returnDocument: 'after' }).lean();
       if (doc) return doc;
     } catch (err) {
       console.warn('[SafeDB] MongoDB update failed:', err.message);
@@ -171,7 +173,7 @@ async function createExecution(data) {
 async function updateExecution(id, updateData) {
   if (isDbConnected()) {
     try {
-      const doc = await AgentExecution.findByIdAndUpdate(id, updateData, { new: true }).lean();
+      const doc = await AgentExecution.findByIdAndUpdate(id, updateData, { returnDocument: 'after' }).lean();
       if (doc) return doc;
     } catch (err) {
       console.warn('[SafeDB] MongoDB update execution failed:', err.message);
@@ -321,7 +323,7 @@ async function listGeneratedLessons(limit = 20) {
 async function updateGeneratedLesson(id, updateData) {
   if (isDbConnected()) {
     try {
-      const doc = await GeneratedLesson.findByIdAndUpdate(id, updateData, { new: true }).lean();
+      const doc = await GeneratedLesson.findByIdAndUpdate(id, updateData, { returnDocument: 'after' }).lean();
       if (doc) return doc;
     } catch (err) {
       console.warn('[SafeDB] MongoDB updateGeneratedLesson failed:', err.message);
@@ -343,7 +345,8 @@ async function saveGeneratedLessonVersion(previousLessonId, updateData, editMeta
 
   const rootId = previous.rootLessonId || previous._id;
   const newVersionNumber = (previous.version || 1) + 1;
-  const newVersionTag = `v${newVersionNumber}.0 (${editMetadata.editedBy === 'instructor' ? 'Instructor Edit' : 'AI Iteration'})`;
+  const editorType = editMetadata.editedBy || updateData.editedBy || 'instructor';
+  const newVersionTag = `v${newVersionNumber}.0 (${editorType === 'instructor' ? 'Instructor Edit' : 'AI Iteration'})`;
 
   // 1. Mark previous version as not latest
   await updateGeneratedLesson(previous._id, { isLatestVersion: false });
@@ -517,6 +520,117 @@ async function listQcReports(limit = 20) {
     .slice(0, limit);
 }
 
+// ── Workflow Executions (Multi-Agent Live Orchestration) ────────────────────
+
+async function saveWorkflowExecution(data) {
+  const runId = data.runId;
+  if (!runId) throw new Error('runId is required for WorkflowExecution');
+
+  if (isDbConnected()) {
+    try {
+      const doc = await WorkflowExecution.findOneAndUpdate(
+        { runId },
+        { $set: data },
+        { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
+      ).lean();
+      return doc;
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB saveWorkflowExecution failed:', err.message);
+    }
+  }
+
+  const existing = memStore.workflows.get(runId) || {};
+  const merged = {
+    _id: existing._id || generateId(),
+    ...existing,
+    ...data,
+    updatedAt: new Date(),
+  };
+  memStore.workflows.set(runId, merged);
+  return merged;
+}
+
+async function findWorkflowExecutionByRunId(runId) {
+  if (isDbConnected()) {
+    try {
+      const doc = await WorkflowExecution.findOne({ runId }).lean();
+      if (doc) return doc;
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB findWorkflowExecutionByRunId failed:', err.message);
+    }
+  }
+  return memStore.workflows.get(runId) || null;
+}
+
+async function updateWorkflowExecution(runId, updateData) {
+  if (isDbConnected()) {
+    try {
+      const doc = await WorkflowExecution.findOneAndUpdate(
+        { runId },
+        { $set: updateData },
+        { returnDocument: 'after' }
+      ).lean();
+      if (doc) return doc;
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB updateWorkflowExecution failed:', err.message);
+    }
+  }
+
+  const existing = memStore.workflows.get(runId);
+  if (!existing) return null;
+  const updated = {
+    ...existing,
+    ...updateData,
+    updatedAt: new Date(),
+  };
+  memStore.workflows.set(runId, updated);
+  return updated;
+}
+
+async function listWorkflowExecutions(limit = 20) {
+  if (isDbConnected()) {
+    try {
+      return await WorkflowExecution.find().sort({ createdAt: -1 }).limit(limit).lean();
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB listWorkflowExecutions failed:', err.message);
+    }
+  }
+
+  return Array.from(memStore.workflows.values())
+    .sort((a, b) => new Date(b.createdAt || b.startTime) - new Date(a.createdAt || a.startTime))
+    .slice(0, limit);
+}
+
+/**
+ * Checks if another execution for the given title or globally is already in 'running' state
+ */
+async function findActiveWorkflowExecution(title = null) {
+  const query = { status: 'running' };
+  if (title) {
+    query.lessonTitle = { $regex: new RegExp(`^${title.trim()}$`, 'i') };
+  }
+
+  if (isDbConnected()) {
+    try {
+      const active = await WorkflowExecution.findOne(query).lean();
+      if (active) return active;
+    } catch (err) {
+      console.warn('[SafeDB] MongoDB findActiveWorkflowExecution failed:', err.message);
+    }
+  }
+
+  // In-memory check
+  for (const wf of memStore.workflows.values()) {
+    if (wf.status === 'running') {
+      if (!title || (wf.lessonTitle && wf.lessonTitle.toLowerCase() === title.trim().toLowerCase())) {
+        return wf;
+      }
+    }
+  }
+
+  return null;
+}
+
 module.exports = {
   isDbConnected,
   createLessonDoc,
@@ -547,4 +661,10 @@ module.exports = {
   findQcReportById,
   findQcReportsByLesson,
   listQcReports,
+  // Workflow Executions
+  saveWorkflowExecution,
+  findWorkflowExecutionByRunId,
+  updateWorkflowExecution,
+  listWorkflowExecutions,
+  findActiveWorkflowExecution,
 };

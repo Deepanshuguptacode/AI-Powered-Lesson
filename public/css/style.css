@@ -1295,6 +1295,37 @@ body {
   font-weight: 700;
 }
 
+/* Orchestration Recovery & Retry Bar */
+.orchestration-recovery-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background-color: #451a03;
+  color: #fef3c7;
+  padding: 10px 18px;
+  font-size: 0.8125rem;
+  border-bottom: 1px solid #78350f;
+  animation: slideDown 0.3s ease-out;
+}
+
+.orchestration-recovery-bar.hidden {
+  display: none !important;
+}
+
+.recovery-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.recovery-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* Architecture Flow Diagram Container */
 .architecture-diagram-container {
   display: flex;

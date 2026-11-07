@@ -3,11 +3,14 @@
 /**
  * Orchestration Controller
  *
- * Provides real-time visibility into the complete multi-stage AI orchestration layer.
+ * Provides real-time visibility into the complete multi-stage AI orchestration layer,
+ * stage retry / failure recovery, cancellation, and duplicate execution guard.
  */
 
 const {
   executeFullOrchestration,
+  retryWorkflowStage,
+  cancelWorkflowExecution,
   getOrchestrationRun,
   listOrchestrationRuns,
   orchestrationEvents,
@@ -19,7 +22,7 @@ const {
  */
 async function startOrchestration(req, res, next) {
   try {
-    const { title, learningObjective, async = false } = req.body;
+    const { title, learningObjective, async = false, force = false } = req.body;
 
     if (!title || !learningObjective) {
       return res.status(400).json({
@@ -29,7 +32,6 @@ async function startOrchestration(req, res, next) {
     }
 
     if (async) {
-      // Return runId immediately and execute in background
       const runId = `orch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       res.status(202).json({
         success: true,
@@ -39,14 +41,14 @@ async function startOrchestration(req, res, next) {
         streamUrl: `/api/orchestration/stream/${runId}`,
       });
 
-      executeFullOrchestration({ title, learningObjective, runId }).catch((err) => {
+      executeFullOrchestration({ title, learningObjective, runId, force }).catch((err) => {
         console.error(`[Orchestration] Background run error: ${err.message}`);
       });
       return;
     }
 
     // Synchronous execution (awaits completion and returns full run)
-    const result = await executeFullOrchestration({ title, learningObjective });
+    const result = await executeFullOrchestration({ title, learningObjective, force });
 
     return res.status(result.status === 'completed' ? 200 : 422).json({
       success: result.status === 'completed',
@@ -54,6 +56,59 @@ async function startOrchestration(req, res, next) {
         ? 'AI Orchestration pipeline executed successfully'
         : `Pipeline failed: ${result.error}`,
       data: result,
+    });
+  } catch (err) {
+    if (err.statusCode === 409) {
+      return res.status(409).json({
+        success: false,
+        message: err.message,
+        runId: err.runId,
+        isDuplicate: true,
+      });
+    }
+    next(err);
+  }
+}
+
+/**
+ * POST /api/orchestration/retry/:id/:stage
+ * Retry a specific failed stage (e.g. parallel_research, lesson_generator, parallel_qc)
+ */
+async function retryStage(req, res, next) {
+  try {
+    const { id, stage } = req.params;
+    const { autoContinue = true } = req.body || {};
+
+    const updatedRun = await retryWorkflowStage(id, stage, { autoContinue });
+
+    return res.json({
+      success: true,
+      message: `Stage "${stage}" retried successfully.`,
+      data: updatedRun,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: `Stage retry failed: ${err.message}`,
+    });
+  }
+}
+
+/**
+ * POST /api/orchestration/cancel/:id
+ * Cancel an in-progress workflow run and release lock
+ */
+async function cancelRun(req, res, next) {
+  try {
+    const { id } = req.params;
+    const cancelled = await cancelWorkflowExecution(id);
+    if (!cancelled) {
+      return res.status(404).json({ success: false, message: 'Workflow run not found' });
+    }
+    return res.json({
+      success: true,
+      message: `Workflow "${id}" cancelled successfully.`,
+      data: cancelled,
     });
   } catch (err) {
     next(err);
@@ -64,28 +119,40 @@ async function startOrchestration(req, res, next) {
  * GET /api/orchestration/status/:id
  * Get live status of an orchestration run
  */
-function getRunStatus(req, res) {
-  const run = getOrchestrationRun(req.params.id);
-  if (!run) {
-    return res.status(404).json({ success: false, message: 'Orchestration run not found' });
+async function getRunStatus(req, res, next) {
+  try {
+    let run = getOrchestrationRun(req.params.id);
+    if (!run) {
+      const { findWorkflowExecutionByRunId } = require('../services/safeDb');
+      run = await findWorkflowExecutionByRunId(req.params.id);
+    }
+    if (!run) {
+      return res.status(404).json({ success: false, message: 'Orchestration run not found' });
+    }
+    return res.json({ success: true, data: run });
+  } catch (err) {
+    next(err);
   }
-  return res.json({ success: true, data: run });
 }
 
 /**
  * GET /api/orchestration/runs
  * List recent orchestration runs
  */
-function getRunsList(req, res) {
-  const runs = listOrchestrationRuns();
-  return res.json({ success: true, count: runs.length, data: runs });
+async function getRunsList(req, res, next) {
+  try {
+    const runs = await listOrchestrationRuns();
+    return res.json({ success: true, count: runs.length, data: runs });
+  } catch (err) {
+    next(err);
+  }
 }
 
 /**
  * GET /api/orchestration/stream/:id
  * Server-Sent Events (SSE) stream for live stage updates
  */
-function streamRunUpdates(req, res) {
+async function streamRunUpdates(req, res) {
   const { id } = req.params;
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -94,7 +161,7 @@ function streamRunUpdates(req, res) {
   res.flushHeaders?.();
 
   // Send current state immediately
-  const initialRun = getOrchestrationRun(id);
+  const initialRun = await getOrchestrationRun(id);
   if (initialRun) {
     res.write(`data: ${JSON.stringify(initialRun)}\n\n`);
   }
@@ -116,8 +183,9 @@ function streamRunUpdates(req, res) {
 
 module.exports = {
   startOrchestration,
+  retryStage,
+  cancelRun,
   getRunStatus,
   getRunsList,
   streamRunUpdates,
 };
-
