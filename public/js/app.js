@@ -1625,6 +1625,8 @@ function renderLessonPreview(lesson) {
   const activity = s.handsOnActivity || {};
   const questions = s.knowledgeCheck?.questions || [];
   const summary = s.summary || {};
+  const videos = lesson.youtubeVideos || [];
+  const refs = lesson.references || [];
 
   el.lessonPreviewContainer.innerHTML = `
     <div class="preview-doc">
@@ -1748,6 +1750,52 @@ function renderLessonPreview(lesson) {
             ${(summary.keyTakeaways || []).map((t) => `<li>${escapeHtml(t)}</li>`).join('')}
           </ul>
           <p><strong>Next Steps:</strong> ${escapeHtml(summary.nextSteps || '')}</p>
+        </div>
+      </div>
+
+      <!-- Section 8: Supplementary YouTube Videos, Books & Web Resources -->
+      <div class="preview-section-block">
+        <div class="preview-sec-header">
+          <h3 class="preview-sec-title">8. Supplementary YouTube Videos & Research References</h3>
+          <span class="preview-time-tag">Multimedia & Sources</span>
+        </div>
+        <div class="preview-sec-body">
+          ${videos.length > 0 ? `
+            <h4 class="font-bold text-primary mb-2">📺 Curated YouTube Video Resources</h4>
+            <div class="preview-resource-grid mb-4">
+              ${videos.map((v) => `
+                <div class="preview-resource-card">
+                  <div class="res-card-header">
+                    <span class="res-icon">📺</span>
+                    <strong class="res-title">${escapeHtml(v.title || 'Video Resource')}</strong>
+                  </div>
+                  <div class="res-meta text-muted small">${escapeHtml(v.channelName || v.channelTitle || 'YouTube Channel')} ${v.durationDescription ? `• ${escapeHtml(v.durationDescription)}` : ''}</div>
+                  ${v.url ? `<a href="${escapeHtml(v.url)}" target="_blank" rel="noopener noreferrer" class="preview-res-link">▶ Watch Video on YouTube</a>` : ''}
+                  ${v.relevance || v.reason ? `<p class="res-desc small mt-1">${escapeHtml(v.relevance || v.reason)}</p>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          ` : '<p class="text-muted">No supplementary YouTube videos attached.</p>'}
+
+          ${refs.length > 0 ? `
+            <h4 class="font-bold text-primary mb-2 mt-4">📚 Books & Web Academic References</h4>
+            <div class="preview-resource-grid">
+              ${refs.map((r) => `
+                <div class="preview-resource-card">
+                  <div class="res-card-header">
+                    <span class="res-icon">${r.sourceType === 'book' ? '📖' : '🌐'}</span>
+                    <strong class="res-title">${escapeHtml(r.title || 'Reference Source')}</strong>
+                  </div>
+                  <div class="res-meta text-muted small">
+                    <span class="badge-source-type">${r.sourceType === 'book' ? '📚 Book / Textbook' : '🌐 Web Encyclopedia'}</span>
+                    ${r.authors?.length ? ` • ${escapeHtml(Array.isArray(r.authors) ? r.authors.join(', ') : r.authors)}` : ''}
+                  </div>
+                  ${r.url ? `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer" class="preview-res-link">🔗 Open Verified Source</a>` : ''}
+                  ${r.keyTakeaway || r.description ? `<p class="res-desc small mt-1">${escapeHtml(r.keyTakeaway || r.description)}</p>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          ` : '<p class="text-muted">No external reference sources attached.</p>'}
         </div>
       </div>
     </div>

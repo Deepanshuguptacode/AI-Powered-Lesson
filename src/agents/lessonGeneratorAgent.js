@@ -288,10 +288,45 @@ Return ONLY this JSON structure (no markdown, no extra text):
 
   console.log(`[LessonGenerator] Lesson generated successfully`);
 
+  // ── Ensure all relevant YouTube, Book, and Web links found by agents are included ──
+  rawLessonJson.youtubeVideos = Array.isArray(rawLessonJson.youtubeVideos) ? rawLessonJson.youtubeVideos : [];
+  if (Array.isArray(youtubeResults) && youtubeResults.length > 0) {
+    youtubeResults.forEach((yt) => {
+      const url = yt.url || (yt.videoId ? `https://www.youtube.com/watch?v=${yt.videoId}` : '');
+      if (url && !rawLessonJson.youtubeVideos.some(v => v.url === url)) {
+        rawLessonJson.youtubeVideos.push({
+          title: yt.title || 'Relevant Lecture Video',
+          url,
+          channelTitle: yt.channelName || yt.channelTitle || 'YouTube Educator',
+          channelName: yt.channelName || yt.channelTitle || 'YouTube Educator',
+          relevance: yt.description || yt.snippet || 'Found by YouTube Research Agent for supplementary conceptual learning',
+        });
+      }
+    });
+  }
+
+  rawLessonJson.references = Array.isArray(rawLessonJson.references) ? rawLessonJson.references : [];
+  if (Array.isArray(webResults) && webResults.length > 0) {
+    webResults.forEach((ref) => {
+      const url = ref.url || ref.previewLink || ref.infoLink || '';
+      if (url && !rawLessonJson.references.some(r => r.url === url)) {
+        rawLessonJson.references.push({
+          title: ref.title || 'Academic Reference / Textbook',
+          url,
+          sourceType: ref.sourceType || 'web',
+          source: ref.sourceType === 'book' ? 'Google Books / Open Library' : 'DuckDuckGo / Web',
+          authors: ref.authors || (ref.author ? [ref.author] : []),
+          keyTakeaway: ref.snippet || ref.description || 'Core evidence retrieved by Multi-Agent Research Swarm',
+          description: ref.snippet || ref.description || '',
+        });
+      }
+    });
+  }
+
   const stepEntry = {
     agent:       'lessonGenerator',
     action:      'generateLesson',
-    reasoning:   `Generated 45-minute lesson for "${lessonTitle}" using ${evidence.length} evidence items`,
+    reasoning:   `Generated 45-minute lesson for "${lessonTitle}" using ${evidence.length} evidence items and ${rawLessonJson.youtubeVideos.length} YouTube / ${rawLessonJson.references.length} reference links`,
     observation: `Sections: ${Object.keys(rawLessonJson.sections || {}).join(', ')}`,
     durationMs:  Date.now() - startTime,
     status:      'done',
