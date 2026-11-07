@@ -6,7 +6,13 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test:research": "node test-research.js"
+    "test": "node tests/test-langgraph-qc-loop.js",
+    "test:qc-loop": "node tests/test-langgraph-qc-loop.js",
+    "test:lesson-qc": "node tests/test-lesson-and-qc.js",
+    "test:research": "node tests/test-research.js",
+    "test:guardrails": "node tests/test-guardrails-and-dashboard.js",
+    "test:api": "node tests/test-e2e-api.js",
+    "test:e2e": "node tests/test-final-e2e.js"
   },
   "keywords": [
     "ai",

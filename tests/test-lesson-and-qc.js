@@ -10,10 +10,11 @@
  *   4. QC agents (runQcGraphs) in parallel
  *   5. MongoDB persistence and retrieval
  *
- * Run: node test-lesson-and-qc.js
+ * Run: node tests/test-lesson-and-qc.js
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const mongoose = require('mongoose');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -26,7 +27,7 @@ function section(title) { console.log(`\n${'─'.repeat(60)}\n${title}\n${'─'.
 
 function testSchemaValidation() {
   section('TEST 1: Schema Validation');
-  const { validateLesson } = require('./src/schemas/lessonSchema');
+  const { validateLesson } = require('../src/schemas/lessonSchema');
 
   const validLesson = {
     title: 'Introduction to Recursion',
@@ -75,7 +76,7 @@ function testSchemaValidation() {
 
 function testDurationValidator() {
   section('TEST 2: 45-Minute Duration Validator');
-  const { validateTotalDuration, SECTION_DURATIONS } = require('./src/schemas/lessonSchema');
+  const { validateTotalDuration, SECTION_DURATIONS } = require('../src/schemas/lessonSchema');
 
   // All expected durations: 5+12+8+8+7+3+2 = 45
   const total = Object.values(SECTION_DURATIONS).reduce((a, b) => a + b, 0);
@@ -95,7 +96,7 @@ function testDurationValidator() {
 
 async function testLessonGeneration() {
   section('TEST 3: Lesson Generation (LangGraph)');
-  const { runLessonGraph } = require('./src/agents/lessonGraph');
+  const { runLessonGraph } = require('../src/agents/lessonGraph');
 
   try {
     console.log('  Running lesson graph (no research session — LLM knowledge fallback)...');
@@ -132,7 +133,7 @@ async function testLessonGeneration() {
 
 async function testLessonRetrieval(savedLessonId) {
   section('TEST 4: Lesson Retrieval from MongoDB');
-  const { findGeneratedLessonById, listGeneratedLessons } = require('./src/services/safeDb');
+  const { findGeneratedLessonById, listGeneratedLessons } = require('../src/services/safeDb');
 
   if (!savedLessonId) {
     console.log('  ⚠️  SKIP: No saved lesson ID available from Test 3');
@@ -155,8 +156,8 @@ async function testLessonRetrieval(savedLessonId) {
 
 async function testQcAgents(savedLessonId) {
   section('TEST 5: Parallel QC Agents (Factual + Instructional)');
-  const { runQcGraphs } = require('./src/agents/qcGraph');
-  const { findQcReportById, findQcReportsByLesson } = require('./src/services/safeDb');
+  const { runQcGraphs } = require('../src/agents/qcGraph');
+  const { findQcReportById, findQcReportsByLesson } = require('../src/services/safeDb');
 
   if (!savedLessonId) {
     console.log('  ⚠️  SKIP: No saved lesson ID available from Test 3');
@@ -226,7 +227,7 @@ async function testQcAgents(savedLessonId) {
 
 function testInvalidJsonRejection() {
   section('TEST 6: Invalid JSON Rejection');
-  const { validateLesson } = require('./src/schemas/lessonSchema');
+  const { validateLesson } = require('../src/schemas/lessonSchema');
 
   const badInputs = [
     [null, 'null input'],

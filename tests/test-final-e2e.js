@@ -16,24 +16,25 @@
  *  10. MongoDB Workflow Execution Status Tracking
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const http = require('http');
 const axios = require('axios');
 const mongoose = require('mongoose');
-const app = require('./src/app');
-const { connectDB } = require('./src/config/db');
+const app = require('../src/app');
+const { connectDB } = require('../src/config/db');
 const {
   findGeneratedLessonById,
   saveGeneratedLessonVersion,
   approveGeneratedLesson,
   findWorkflowExecutionByRunId,
-} = require('./src/services/safeDb');
+} = require('../src/services/safeDb');
 const {
   getApprovedLessonForExport,
   generateLessonPdf,
   generateLessonDocx,
-} = require('./src/services/exportService');
-const { retryWorkflowStage } = require('./src/services/orchestratorService');
+} = require('../src/services/exportService');
+const { retryWorkflowStage } = require('../src/services/orchestratorService');
 
 const PORT = 5057;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
@@ -123,7 +124,7 @@ async function runTests() {
     persistedRun.status = 'running';
     persistedRun.isLocked = true;
     persistedRun.startTime = new Date(); // fresh start
-    const { updateWorkflowExecution } = require('./src/services/safeDb');
+    const { updateWorkflowExecution } = require('../src/services/safeDb');
     await updateWorkflowExecution(run.runId, { status: 'running', isLocked: true, startTime: new Date() });
 
     try {

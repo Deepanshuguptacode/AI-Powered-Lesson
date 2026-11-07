@@ -5,8 +5,9 @@
  * Version History, QC Outdated Tracking & Live Orchestration
  */
 
-require('dotenv').config();
-const { evaluateInputGuardrails, GUARDRAIL_MODEL } = require('./src/services/inputGuardrails');
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+const { evaluateInputGuardrails, GUARDRAIL_MODEL } = require('../src/services/inputGuardrails');
 const {
   saveGeneratedLesson,
   findGeneratedLessonById,
@@ -16,9 +17,9 @@ const {
   saveQcReport,
   findQcReportsByLesson,
   addQcDecision,
-} = require('./src/services/safeDb');
-const { validateLesson } = require('./src/schemas/lessonSchema');
-const { executeFullOrchestration, getOrchestrationRun } = require('./src/services/orchestratorService');
+} = require('../src/services/safeDb');
+const { validateLesson } = require('../src/schemas/lessonSchema');
+const { executeFullOrchestration, getOrchestrationRun } = require('../src/services/orchestratorService');
 
 function pass(msg) { console.log(`  ✅ PASS: ${msg}`); }
 function fail(msg, err) { console.error(`  ❌ FAIL: ${msg} — ${err || ''}`); }

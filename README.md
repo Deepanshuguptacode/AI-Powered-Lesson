@@ -267,36 +267,64 @@ The engine executes an autonomous 6-stage multi-agent orchestration pipeline orc
 
 ## 🧪 6. Verification & Test Suites
 
-The codebase includes comprehensive test suites validating the multi-agent graphs, iterative self-correction loops, database fallbacks, schema validators, and document export engines:
+All automated test suites are organized in the dedicated [`tests/`](tests/) folder. The test suite validates the multi-agent graphs, iterative self-correction loops, database fallbacks, schema validators, REST API endpoints, and document export engines:
 
+### Quick Run via NPM Scripts
+```bash
+# Run default test suite (LangGraph Iterative QC Loop)
+npm test
+
+# Run individual test suites
+npm run test:qc-loop       # LangGraph Iterative QC Loop & Conditional Routing
+npm run test:lesson-qc     # Lesson Generator, 45-Minute Duration & Parallel QC
+npm run test:research      # Multi-Agent Research Swarm (Web, Book, YouTube)
+npm run test:guardrails    # Input Guardrails, Dashboard & Orchestration
+npm run test:api           # End-to-End HTTP API Integration Test Suite
+npm run test:e2e           # Full System Lifecycle End-to-End Test Suite
+```
+
+### Direct Node Invocations
 ```bash
 # 1. Native LangGraph Iterative QC Loop & Conditional Routing Test
-node test-langgraph-qc-loop.js
+node tests/test-langgraph-qc-loop.js
 
 # 2. Stage 4 Synthesizer, 45-Minute Duration Validator & Parallel QC Test
-node test-lesson-and-qc.js
+node tests/test-lesson-and-qc.js
 
 # 3. Multi-Agent Research Swarm (Web, Book, YouTube Agents) Test
-node test-research.js
+node tests/test-research.js
 
 # 4. Input Guardrails, Dashboard Versioning & Live Orchestrator Test
-node test-guardrails-and-dashboard.js
+node tests/test-guardrails-and-dashboard.js
+
+# 5. End-to-End HTTP REST API Integration Test
+node tests/test-e2e-api.js
+
+# 6. Comprehensive Full Lifecycle End-to-End Test
+node tests/test-final-e2e.js
 ```
 
 ### Verified Test Summary
-- **`test-langgraph-qc-loop.js`**: **7 / 7 PASS (100%)** ✅
+- **`tests/test-langgraph-qc-loop.js`**: **7 / 7 PASS (100%)** ✅
   - Verifies LangGraph state graph compilation and topology.
   - Tests automatic conditional looping when pass 1 scores < 80% (Factual: 75%).
   - Confirms iteration 2 successfully refines content, raises score to 88%, and finalizes with approval.
   - Verifies multi-version preservation (`v1.0` and `v2.0 (QC Improved)`).
-- **`test-lesson-and-qc.js`**: **27 / 27 PASS (100%)** ✅
+- **`tests/test-lesson-and-qc.js`**: **27 / 27 PASS (100%)** ✅
   - Validates strict 45-minute section summation math (`5+12+8+7+6+4+3 = 45`).
   - Confirms schema rejection on mismatched durations, missing objectives, or malformed sections.
   - Confirms concurrent execution of Factual QC and Instructional QC agents.
   - Confirms `youtubeVideos` and `references` arrays are fully populated with active links.
-- **`test-research.js`**: **33 / 33 PASS (100%)** ✅
+- **`tests/test-research.js`**: **33 / 33 PASS (100%)** ✅
   - Validates ReAct supervisor query planning.
   - Verifies parallel scraping and evidence storage across Web, Book, and YouTube agents.
+- **`tests/test-guardrails-and-dashboard.js`**: **23 / 23 PASS (100%)** ✅
+  - Validates input safety guardrails (`openai/gpt-oss-20b`) and prompt injection blocking.
+  - Tests non-destructive versioning (`v1.0`, `v2.0 (Instructor Edit)`), QC status invalidation, and approval gates.
+- **`tests/test-e2e-api.js`**: **14 / 14 PASS (100%)** ✅
+  - Tests live HTTP server endpoints across Express routing, SSE streaming, and guardrail validation.
+- **`tests/test-final-e2e.js`**: **PASS (100%)** ✅
+  - Full end-to-end integration across all 6 stages, concurrency locking, and PDF/DOCX generation.
 
 ---
 

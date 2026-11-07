@@ -11,9 +11,11 @@
  * 5. Full orchestration execution runs stages end-to-end using the graph.
  */
 
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const assert = require('assert');
-const { buildFullLessonQcGraph, runFullLessonQcGraph } = require('./src/agents/lessonQcLoopGraph');
-const { executeFullOrchestration } = require('./src/services/orchestratorService');
+const { buildFullLessonQcGraph, runFullLessonQcGraph } = require('../src/agents/lessonQcLoopGraph');
+const { executeFullOrchestration } = require('../src/services/orchestratorService');
 
 async function runTests() {
   console.log('\n════════════════════════════════════════════════════════════');

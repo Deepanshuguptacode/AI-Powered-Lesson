@@ -7,10 +7,11 @@
  * Tests the core research modules without needing a live MongoDB.
  * API tests (orchestrator + LangGraph) require MongoDB separately.
  *
- * Run: node test-research.js
+ * Run: node tests/test-research.js
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 // ── Colour helpers ─────────────────────────────────────────────────────────────
 const C = {
@@ -39,7 +40,7 @@ function assert(condition, message) {
 // ─────────────────────────────────────────────────────────────────────────────
 async function testWebResearch() {
   head('TEST 1: Web Research Module');
-  const { researchWeb } = require('./src/research/webResearch');
+  const { researchWeb } = require('../src/research/webResearch');
 
   const result = await researchWeb([
     'photosynthesis explained',
@@ -68,7 +69,7 @@ async function testWebResearch() {
 // ─────────────────────────────────────────────────────────────────────────────
 async function testBookResearch() {
   head('TEST 2: Book Research Module');
-  const { researchBooks } = require('./src/research/bookResearch');
+  const { researchBooks } = require('../src/research/bookResearch');
 
   const result = await researchBooks(['photosynthesis biology', 'plant cell biology textbook']);
 
@@ -94,7 +95,7 @@ async function testBookResearch() {
 // ─────────────────────────────────────────────────────────────────────────────
 async function testYouTubeResearch() {
   head('TEST 3: YouTube Research Module');
-  const { researchYouTube } = require('./src/research/youtubeResearch');
+  const { researchYouTube } = require('../src/research/youtubeResearch');
 
   const result = await researchYouTube(
     ['photosynthesis lecture', 'Calvin cycle explained'],
@@ -122,7 +123,7 @@ async function testYouTubeResearch() {
 // ─────────────────────────────────────────────────────────────────────────────
 async function testQueryGenerator() {
   head('TEST 4: Query Generator');
-  const { generateSearchQueries } = require('./src/research/queryGenerator');
+  const { generateSearchQueries } = require('../src/research/queryGenerator');
 
   const queries = await generateSearchQueries(
     'Introduction to Photosynthesis',
@@ -144,8 +145,8 @@ async function testProviderIsolation() {
   head('TEST 5: Provider Isolation (failure does not stop other providers)');
 
   // Simulate YouTube crash inline (without MongoDB orchestrator)
-  const { researchWeb }     = require('./src/research/webResearch');
-  const { researchBooks }   = require('./src/research/bookResearch');
+  const { researchWeb }     = require('../src/research/webResearch');
+  const { researchBooks }   = require('../src/research/bookResearch');
 
   const crashingYouTube = async () => { throw new Error('Simulated YouTube crash'); };
 
@@ -171,7 +172,7 @@ async function testProviderIsolation() {
 // ─────────────────────────────────────────────────────────────────────────────
 async function testLLMGateway() {
   head('TEST 6: LLM Gateway (key pool + hallucination fallback)');
-  const { getKeyPoolSize, getUsageStats, callLLMJson } = require('./src/services/llmGateway');
+  const { getKeyPoolSize, getUsageStats, callLLMJson } = require('../src/services/llmGateway');
   const { HumanMessage } = require('@langchain/core/messages');
 
   const poolSize = getKeyPoolSize();

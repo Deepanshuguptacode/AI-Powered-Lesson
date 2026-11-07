@@ -241,3 +241,21 @@ To ensure pedagogical safety and teacher control, the platform maintains an appe
 2. **QC Decoupling**: QC reports reference specific lesson version IDs (`lessonId`), ensuring an audit report is never mistakenly attributed to a newer or modified draft.
 3. **Approval Requirement**: The publication engine rejects any download attempt unless the requested document has `isApproved: true` and a valid `approvedBy` signature.
 
+---
+
+## 6. Architecture Verification & Test Suites
+
+The multi-agent orchestration architecture is validated by automated test suites in the [`tests/`](tests/) folder:
+
+| Architectural Stage | Validating Test Suite | Execution Command |
+|---|---|---|
+| **Stage 1: LLM Input Guardrails** | [`tests/test-guardrails-and-dashboard.js`](tests/test-guardrails-and-dashboard.js) | `npm run test:guardrails` |
+| **Stage 2 & 3: Planning & Research Swarm** | [`tests/test-research.js`](tests/test-research.js) | `npm run test:research` |
+| **Stage 4 & 4b: LangGraph Iterative QC Loop** | [`tests/test-langgraph-qc-loop.js`](tests/test-langgraph-qc-loop.js) | `npm run test:qc-loop` |
+| **Stage 4 & 5: Lesson Synth & Parallel QC** | [`tests/test-lesson-and-qc.js`](tests/test-lesson-and-qc.js) | `npm run test:lesson-qc` |
+| **Stage 1-6: End-to-End REST APIs** | [`tests/test-e2e-api.js`](tests/test-e2e-api.js) | `npm run test:api` |
+| **Stage 1-6: Full Lifecycle & Document Export** | [`tests/test-final-e2e.js`](tests/test-final-e2e.js) | `npm run test:e2e` |
+
+For detailed instructions and test coverage descriptions, refer to [`tests/README.md`](tests/README.md).
+
+

@@ -5,10 +5,11 @@
  * Spins up Express app and tests HTTP endpoints with Axios
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const http = require('http');
 const axios = require('axios');
-const app = require('./src/app');
+const app = require('../src/app');
 
 const PORT = 5055;
 const BASE = `http://127.0.0.1:${PORT}`;
